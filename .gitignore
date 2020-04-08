@@ -127,3 +127,22 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Generated files
+figures/
+dataset/*.json
+*.model
+*.json
+*.gz
+*.tar
+*.zip
+
+# Vim
+*~
+
+# Plots
+*.png
+*.pdf
+
+# Results
+results/
