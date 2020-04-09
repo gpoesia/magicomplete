@@ -179,6 +179,10 @@ def build_oneshot_dataset(dataset, language, eval_examples, n_abbreviations,
     with open('oneshot_dataset.json', 'w') as f:
         json.dump(oneshot_dataset, f)
 
+def batched(l, batch_size):
+    for b in range((len(l) + batch_size - 1) // batch_size):
+        yield l[b*batch_size:(b+1)*batch_size]
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
 
