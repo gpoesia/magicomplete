@@ -22,7 +22,7 @@ class OneShotEvaluator:
     def name(self):
         raise NotImplemented()
 
-    def evaluate(self, learner):
+    def evaluate(self, learner, dataset, save_examples=False):
         raise NotImplemented()
 
 class LearnEvalIterate(OneShotEvaluator):
@@ -32,17 +32,18 @@ class LearnEvalIterate(OneShotEvaluator):
     def name(self):
         return "LearnEvalIterate"
 
-    def evaluate(self, learner, dataset):
+    def evaluate(self, learner, dataset, save_examples=False):
         u = User(conventions_queue=[(row['string'], row['abbreviation']) for row in dataset])
 
         accuracies = []
         accuracies_positive, accuracies_negative = [], []
+        examples = []
         p = Progress(len(dataset))
 
         for row in dataset:
             u.add_next_convention()
 
-            training_example = random.choice(row['positive_examples'])
+            training_example = row['positive_examples'][0]
             learner.learn((u.encode(training_example), training_example))
 
             test_positive = list(set(s for s in row['positive_examples'] if s != training_example))
@@ -54,6 +55,9 @@ class LearnEvalIterate(OneShotEvaluator):
                 encoded_batch = [u.encode(s) for s in batch]
                 learner_prediction = learner.test(encoded_batch)
                 correct_positive.extend([int(p == s) for p, s in zip(batch, learner_prediction)])
+                if save_examples:
+                    examples.extend([{'long': l, 'short': s, 'prediction': p}
+                                     for l, s, p in zip(batch, encoded_batch, learner_prediction)])
 
             correct_negative = []
 
@@ -61,6 +65,9 @@ class LearnEvalIterate(OneShotEvaluator):
                 encoded_batch = [u.encode(s) for s in batch]
                 learner_prediction = learner.test(encoded_batch)
                 correct_negative.extend([int(p == s) for p, s in zip(batch, learner_prediction)])
+                if save_examples:
+                    examples.extend([{'long': l, 'short': s, 'prediction': p}
+                                     for l, s, p in zip(batch, encoded_batch, learner_prediction)])
 
             accuracies.append(np.mean(correct_positive + correct_negative))
             accuracies_positive.append(np.mean(correct_positive))
@@ -73,6 +80,7 @@ class LearnEvalIterate(OneShotEvaluator):
             'per_example_accuracy': accuracies,
             'per_example_accuracy_positive': accuracies_positive,
             'per_example_accuracy_negative': accuracies_negative,
+            'examples': examples,
         }
 
 class LearnAllThenEval(OneShotEvaluator):
@@ -88,12 +96,13 @@ class LearnAllThenEval(OneShotEvaluator):
         accuracies = []
         accuracies_positive, accuracies_negative = [], []
         train = []
+        examples = []
         p = Progress(len(dataset))
 
         for row in dataset:
             u.add_next_convention()
 
-            training_example = random.choice(row['positive_examples'])
+            training_example = row['positive_examples'][0]
             train.append(training_example)
             learner.learn((u.encode(training_example), training_example))
 
@@ -107,6 +116,9 @@ class LearnAllThenEval(OneShotEvaluator):
                 encoded_batch = [u.encode(s) for s in batch]
                 learner_prediction = learner.test(encoded_batch)
                 correct_positive.extend([int(p == s) for p, s in zip(batch, learner_prediction)])
+                if save_examples:
+                    examples.extend([{'long': l, 'short': s, 'prediction': p}
+                                     for l, s, p in zip(batch, encoded_batch, learner_prediction)])
 
             correct_negative = []
 
@@ -114,6 +126,9 @@ class LearnAllThenEval(OneShotEvaluator):
                 encoded_batch = [u.encode(s) for s in batch]
                 learner_prediction = learner.test(encoded_batch)
                 correct_negative.extend([int(p == s) for p, s in zip(batch, learner_prediction)])
+                if save_examples:
+                    examples.extend([{'long': l, 'short': s, 'prediction': p}
+                                     for l, s, p in zip(batch, encoded_batch, learner_prediction)])
 
             accuracies.append(np.mean(correct_positive + correct_negative))
             accuracies_positive.append(np.mean(correct_positive))
@@ -126,8 +141,8 @@ class LearnAllThenEval(OneShotEvaluator):
             'per_example_accuracy': accuracies,
             'per_example_accuracy_positive': accuracies_positive,
             'per_example_accuracy_negative': accuracies_negative,
+            'examples': examples,
         }
-
 
 
 class PriorBaseline(OneShotLearner):
