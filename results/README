@@ -1,1 +1,14 @@
 Directory for results obtained from experiments.
+
+### oneshot_experiment_results_2020-04-11T18:59:58.489410.json
+
+One-shot learning experiment, tested KGradientSteps and StepUntilCorrect
+algorithms with various hyper-parameter values, evaluating in 300 abbreviations.
+Best learning rate: 0.1 for almost all models.
+Best accuracy: StepUntilCorrect(lr=0.1, max=8, extra=2 or 4), positive accuracy of 18.4%,
+negative accuracy of 30.4%. KGradientSteps(lr=0.1, k=5) comes close,
+positive accuracy of 17.3% and negative 34%.
+PriorBaseline has a positive accuracy of 0.3%.
+
+This is all evaluating with LearnEvalIterate. No model was useful under LearnAllThenEval.
+Will probably need rehearsal for that.
