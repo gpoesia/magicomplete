@@ -4,8 +4,10 @@ import json
 from alphabet import *
 from decoder import *
 
-def load_model(model, is_baseline=True, load_best=False):
-    device = torch.device(0) if torch.cuda.is_available() else torch.device('cpu')
+def load_model(model, is_baseline=True, load_best=False, device=None):
+    if device is None:
+        device = torch.device(0) if torch.cuda.is_available() else torch.device('cpu')
+
     encoder, alpha, dataset, lang_name = model
 
     if load_best:
