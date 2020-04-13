@@ -7,6 +7,7 @@ import torch.nn.functional as F
 
 from util import batched, Progress
 from user import User
+from data import augment
 
 class OneShotLearner:
     def name(self):
@@ -212,16 +213,24 @@ class StepUntilCorrect(OneShotLearner):
         self.learning_rate = parameters.get('learning_rate') or 1e-2
         self.max_steps = parameters.get('max_steps') or 8
         self.extra_steps = parameters.get('extra_steps') or 0
+        self.data_augmentation = parameters.get('data_augmentation') or None
 
         self.optimizer = torch.optim.SGD(self.decoder.parameters(), lr=self.learning_rate)
 
     def name(self):
-        return 'StepUntilCorrect(lr={}, max={}, extra={})'.format(self.learning_rate,
-                                                                  self.max_steps,
-                                                                  self.extra_steps)
+        return ('StepUntilCorrect(lr={}, max={}, extra={}, data_augmentation={})'
+                .format(self.learning_rate,
+                        self.max_steps,
+                        self.extra_steps,
+                        self.data_augmentation or 'no'))
 
     def learn(self, example):
         short, long = example
+
+        batch = ([example]
+                 if self.data_augmentation is None
+                 else augment(short, long, only_shortened=(self.data_augmentation == 'only_short')))
+        batch_short, batch_long = zip(*batch)
 
         correct_since = self.max_steps
 
@@ -237,7 +246,7 @@ class StepUntilCorrect(OneShotLearner):
 
             self.decoder.train()
             self.optimizer.zero_grad()
-            loss = self.decoder([short], self.alphabet, [long]).mean()
+            loss = self.decoder(batch_short, self.alphabet, batch_long).mean()
             loss.backward()
             self.optimizer.step()
 

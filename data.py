@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import ast
 
 SMALL, MEDIUM, LARGE = 'small.json', 'medium.json', 'large.json'
 
@@ -39,3 +40,45 @@ def generate_sanity_check_dataset():
         l.append(random.choice('abcdefghijklmnopqrstuvwxyz') * random.choice([5, 10]))
 
     return {'train': l, 'dev': l, 'test': l}
+
+def get_kept_character_indices(original, short):
+    kept = []
+    i_original, i_short = 0, 0
+
+    while i_short < len(short) and i_original < len(original):
+        if short[i_short] == original[i_original]:
+            kept.append(i_original)
+            i_short += 1
+
+        i_original += 1
+
+    return kept
+
+def infer_token_limits(s):
+    limits = [0]
+    for i in range(1, len(s)):
+        if s[i].isalnum() != s[i-1].isalnum():
+            limits.append(i)
+    limits.append(len(s))
+    return limits
+
+def augment(short, original, only_shortened=True):
+    kept = set(get_kept_character_indices(original, short))
+    limits = infer_token_limits(original)
+
+    examples = [(short, original)]
+
+    for i, begin in enumerate(limits):
+        for end in limits[i+1:]:
+            ss = original[begin:end]
+            if len(ss.strip()) == len(ss):
+                try:
+                    ast.parse(ss)
+                    ss_short = ''.join(original[i] for i in range(len(original))
+                                       if begin <= i < end and i in kept)
+                    if not only_shortened or len(ss_short) < len(ss):
+                        examples.append((ss_short, ss))
+                except:
+                    pass
+
+    return examples
