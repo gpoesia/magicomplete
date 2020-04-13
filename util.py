@@ -100,7 +100,7 @@ def build_oneshot_dataset(dataset, language, eval_examples, n_abbreviations,
 
     # Get all candidates.
     for l in dataset:
-        for sz in range(3, 20):
+        for sz in range(3, 40):
             for i in range(len(l) - sz + 1):
                 ss = l[i:i+sz]
                 if ss.strip() == ss and any(map(lambda c: c.isalnum(), ss)):
@@ -128,7 +128,7 @@ def build_oneshot_dataset(dataset, language, eval_examples, n_abbreviations,
 
     print('Maximal candidates:', len(candidates))
 
-    candidates.sort(key=lambda kv: len(kv[0])**2 * math.log(kv[1]), reverse=True)
+    candidates.sort(key=lambda kv: len(kv[0]) * math.log(kv[1]), reverse=True)
 
     if len(candidates) < n_abbreviations:
         raise Exception("Not enough maximal candidates: asked for {}, have {}"
