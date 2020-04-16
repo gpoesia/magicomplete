@@ -134,14 +134,10 @@ def build_oneshot_dataset(dataset, language, eval_examples, n_abbreviations,
         raise Exception("Not enough maximal candidates: asked for {}, have {}"
                         .format(n_abbreviations, len(candidates)))
 
-    candidates = candidates[:n_abbreviations]
-
     oneshot_dataset = []
 
-    good, bad = 0, 0
-
     print('Computing abbreviations and finding examples...')
-    p = Progress(len(candidates))
+    p = Progress(n_abbreviations)
 
     for k, v in candidates:
         best_abbreviation = None
@@ -150,31 +146,34 @@ def build_oneshot_dataset(dataset, language, eval_examples, n_abbreviations,
 
         for i in range(10):
             abbreviation = abbreviation_strategy.abbreviate(k)
-            negative_examples = [s for s in dataset if s.find(abbreviation) != -1]
+            negative_examples = list({s for s in dataset if s.find(abbreviation) != -1})
 
             if best_abbreviation is None or len(negative_examples) > len(best_negative_examples):
                 best_abbreviation = abbreviation
                 best_negative_examples = negative_examples
 
-        oneshot_dataset.append({
-            'string': k,
-            'abbreviation': best_abbreviation,
-            'positive_examples': random.sample(positive_examples,
-                                               min(len(positive_examples), eval_examples)),
-            'negative_examples': random.sample(best_negative_examples,
-                                               min(len(best_negative_examples), eval_examples)),
-        })
+        positive_examples = list(set(positive_examples))
+        negative_examples = list(set(best_negative_examples))
 
-        if len(best_negative_examples) >= eval_examples:
-            good += 1
-        else:
-            bad += 1
+        if min(len(positive_examples), len(negative_examples)) >= eval_examples:
+            random.shuffle(positive_examples)
+            random.shuffle(negative_examples)
 
-        p.tick()
-        if (p.current_iteration + 1) % 100 == 0:
-            print(p.format())
+            oneshot_dataset.append({
+                'string': k,
+                'abbreviation': best_abbreviation,
+                'positive_examples': positive_examples[:eval_examples],
+                'negative_examples': negative_examples[:eval_examples],
+                'positive_examples_train': positive_examples[eval_examples:2*eval_examples],
+                'negative_examples_train': negative_examples[eval_examples:2*eval_examples],
+            })
 
-    print('Good:', good, 'bad:', bad)
+            p.tick()
+            if (p.current_iteration + 1) % 100 == 0:
+                print(p.format())
+
+        if len(oneshot_dataset) == n_abbreviations:
+            break
 
     with open('oneshot_dataset.json', 'w') as f:
         json.dump(oneshot_dataset, f)
@@ -192,7 +191,7 @@ if __name__ == '__main__':
     parser.add_argument('--new-convention-every', default=100, type=int, help='Iterations between new conventions')
     parser.add_argument('--precompute-interactions', action='store_const', const=True, default=False)
     parser.add_argument('--build-oneshot-dataset', action='store_const', const=True, default=False)
-    parser.add_argument('--oneshot-eval-examples', type=int, default=200, help='How many positive/negative examples to fetch for each convention in the one-shot dataset')
+    parser.add_argument('--oneshot-eval-examples', type=int, default=100, help='How many positive/negative examples to fetch for each convention in the one-shot dataset')
     parser.add_argument('--oneshot-abbreviations', type=int, default=1000, help='How many abbreviations scenarios to put in the one-shot dataset.')
     parser.add_argument('--one-convention', help='Limit to applying at most one convention per input.',
                         action='store_const', const=True, default=False)
