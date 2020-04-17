@@ -214,15 +214,18 @@ class StepUntilCorrect(OneShotLearner):
         self.max_steps = parameters.get('max_steps') or 8
         self.extra_steps = parameters.get('extra_steps') or 0
         self.data_augmentation = parameters.get('data_augmentation') or None
+        self.rehearsal_examples = parameters.get('rehearsal_examples') or 0
 
         self.optimizer = torch.optim.SGD(self.decoder.parameters(), lr=self.learning_rate)
+        self.past_examples = []
 
     def name(self):
-        return ('StepUntilCorrect(lr={}, max={}, extra={}, data_augmentation={})'
+        return ('StepUntilCorrect(lr={}, max={}, extra={}, data_augmentation={}, reheasal_examples={})'
                 .format(self.learning_rate,
                         self.max_steps,
                         self.extra_steps,
-                        self.data_augmentation or 'no'))
+                        self.data_augmentation or 'no',
+                        self.rehearsal_examples))
 
     def learn(self, example):
         short, long = example
@@ -244,11 +247,22 @@ class StepUntilCorrect(OneShotLearner):
             if i >= correct_since + self.extra_steps:
                 break
 
+            rehearsal_batch = random.sample(self.past_examples,
+                                            min(len(self.past_examples), self.rehearsal_examples))
+
+            rehearsal_short, rehearsal_long = (zip(*rehearsal_batch)
+                                               if len(rehearsal_batch)
+                                               else ((), ()))
+
             self.decoder.train()
             self.optimizer.zero_grad()
-            loss = self.decoder(batch_short, self.alphabet, batch_long).mean()
+            loss = self.decoder(batch_short + rehearsal_short,
+                                self.alphabet,
+                                batch_long + rehearsal_long).mean()
             loss.backward()
             self.optimizer.step()
+
+        self.past_examples.extend(batch)
 
     def test(self, examples):
         self.decoder.eval()
