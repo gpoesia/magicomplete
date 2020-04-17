@@ -76,7 +76,7 @@ def augment(short, original, only_shortened=True):
                     ast.parse(ss)
                     ss_short = ''.join(original[i] for i in range(len(original))
                                        if begin <= i < end and i in kept)
-                    if not only_shortened or len(ss_short) < len(ss):
+                    if len(ss_short) > 0 and (not only_shortened or len(ss_short) < len(ss)):
                         examples.append((ss_short, ss))
                 except:
                     pass
