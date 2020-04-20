@@ -67,6 +67,10 @@ class User:
         s, c = self.conventions_queue.pop()
         self.conventions[s] = c
 
+    def add_new_convention(self, string, abbreviation):
+        self.conventions[string] = abbreviation
+        self.convention_id[string] = len(self.conventions) - 1
+
     def prune(self):
         if len(self.substring_count) > 10**5:
             all_substrings = [(k, v) for k, v in self.substring_count.items()]

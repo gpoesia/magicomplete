@@ -13,14 +13,17 @@ import random
 from abbreviation import UniformAbbreviation
 
 class Progress:
-    def __init__(self, total_iterations=None, timeout=None):
+    def __init__(self, total_iterations=None, timeout=None, print_every=None):
         self.total_iterations = total_iterations
         self.timeout = timeout
         self.begin = time.time()
         self.current_iteration = 0
+        self.print_every = print_every
 
     def tick(self):
         self.current_iteration += 1
+        if self.print_every is not None and self.current_iteration % self.print_every == 0:
+            print(self.format())
 
     def format(self):
         now = time.time()
