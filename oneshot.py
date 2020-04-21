@@ -91,7 +91,7 @@ class LearnAllThenEval(OneShotEvaluator):
     def name(self):
         return "LearnAllThenEval"
 
-    def evaluate(self, learner, dataset):
+    def evaluate(self, learner, dataset, save_examples=False):
         u = User(conventions_queue=[(row['string'], row['abbreviation']) for row in dataset])
 
         accuracies = []
@@ -204,8 +204,23 @@ class KGradientSteps(OneShotLearner):
 
         return results
 
+def infer_abbreviation(short, long):
+    # FIXME: This doesn't really disambiguate between all the possible abbreviations...
+    # That doesn't seem possible to do deterministically with a single example.
+    for prefix in range(len(short)):
+        if short[prefix] != long[prefix]:
+            break
+        prefix += 1
+
+    for suffix in range(len(short)):
+        if short[-1 - suffix] != long[-1 - suffix]:
+            break
+        suffix += 1
+
+    return (short[prefix:-suffix], long[prefix:-suffix])
+
 class StepUntilCorrect(OneShotLearner):
-    def __init__(self, prior_decoder, alphabet, parameters={}):
+    def __init__(self, prior_decoder, alphabet,  parameters={}, augmentation_dataset=[]):
         self.decoder = prior_decoder.clone(alphabet)
         self.alphabet = alphabet
 
@@ -215,6 +230,7 @@ class StepUntilCorrect(OneShotLearner):
         self.extra_steps = parameters.get('extra_steps') or 0
         self.data_augmentation = parameters.get('data_augmentation') or None
         self.rehearsal_examples = parameters.get('rehearsal_examples') or 0
+        self.augmentation_dataset = augmentation_dataset
 
         self.optimizer = torch.optim.SGD(self.decoder.parameters(), lr=self.learning_rate)
         self.past_examples = []
@@ -227,13 +243,26 @@ class StepUntilCorrect(OneShotLearner):
                         self.data_augmentation or 'no',
                         self.rehearsal_examples))
 
+    def fetch_augmentation_examples(self, short, long):
+        ab_short, ab_long = infer_abbreviation(short, long)
+        for row in self.augmentation_dataset:
+            if long in row['positive_examples']:
+                return ([(s.replace(row['string'], row['abbreviation']), s)
+                         for s in row['positive_examples_train']] +
+                        [(s, s) for s in row['negative_examples_train']])
+
+    def trim_examples(self, batch):
+        return [batch[0]] + random.sample(batch[1:], min(len(batch) - 1, self.batch_size - 1))
+
     def learn(self, example):
         short, long = example
 
-        batch = ([example]
-                 if self.data_augmentation is None
-                 else augment(short, long, only_shortened=(self.data_augmentation == 'only_short')))
-        batch_short, batch_long = zip(*batch)
+        if self.data_augmentation is None:
+            batch = [example]
+        elif self.data_augmentation in ('ast_only_short', 'ast_all'):
+            batch = augment(short, long, only_shortened=(self.data_augmentation == 'only_short'))
+        elif self.data_augmentation == 'fetch_examples':
+            batch = [example] + self.fetch_augmentation_examples(short, long)
 
         correct_since = self.max_steps
 
@@ -256,6 +285,9 @@ class StepUntilCorrect(OneShotLearner):
 
             self.decoder.train()
             self.optimizer.zero_grad()
+
+            batch_short, batch_long = zip(*self.trim_examples(batch))
+
             loss = self.decoder(batch_short + rehearsal_short,
                                 self.alphabet,
                                 batch_long + rehearsal_long).mean()
