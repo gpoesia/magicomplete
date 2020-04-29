@@ -12,8 +12,8 @@ class AlphabetEncoding:
 
     def embedding_size(self):
         'returns number of dimensions in the embedding / encoding'
-
         raise NotImplemented()
+
     def encode(self, s):
         'Given a string, returns a 2D tensor representation of it.'
         raise NotImplemented()
@@ -128,16 +128,19 @@ class AsciiOneHotEncoding(AlphabetEncoding):
     def padding_token_index(self):
         return self.PADDING_INDEX
 
-    # def is_optimizeable(self):
-    #     'Returns whether this encoder should be optimized in end-to-end training.'
-    #     return False
     def encode_batch(self, batch):
+        if len(batch) == 0:
+            return torch.zeros((0, 0, self.ALPHABET_SIZE), device=self.device)
+
         max_length = max(map(len, batch))
         return torch.stack(
                 [torch.cat([self.encode(s), self.PADDING.repeat(max_length - len(s), 1)])
                  for s in batch])
 
     def encode_batch_indices(self, batch):
+        if len(batch) == 0:
+            return torch.zeros((0, 0), device=self.device)
+
         max_length = max(map(len, batch))
         padding_tensor = torch.tensor([self.PADDING_INDEX],
                                       dtype=torch.long, device=self.device)
@@ -164,7 +167,6 @@ class AsciiOneHotEncoding(AlphabetEncoding):
 
 
 class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
-# class AsciiEmbeddedEncoding(AlphabetEncoding):
     '''character embedding for ASCII characters.
 
     Uses control ASCII characters 0, 1 and 2 for padding, start and end tokens,
@@ -178,7 +180,6 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
     COPY_INDEX = 3
 
     def __init__(self, device):
-        # super(AsciiEmbeddedEncoding, self).__init__()
         super().__init__()
         self.device = device
         self.ascii_embedding = nn.Embedding(
@@ -226,10 +227,15 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
         return self.PADDING_INDEX
 
     def encode_batch(self, batch):
+        if len(batch) == 0:
+            return torch.zeros((0, 0, self.EMBEDDING_SIZE), device=self.device)
+
         return self.encode_tensor_indices(self.encode_batch_indices(batch))
-        
 
     def encode_batch_indices(self, batch):
+        if len(batch) == 0:
+            return torch.zeros((0, 0), device=self.device)
+
         max_length = max(map(len, batch))
         padding_tensor = torch.tensor([self.PADDING_INDEX],
                                       dtype=torch.long, device=self.device)

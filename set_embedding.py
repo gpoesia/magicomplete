@@ -71,7 +71,7 @@ class SetEmbedding(nn.Module):
         for p in self.parameters():
             p.data.uniform_(-init_scale, init_scale)
 
-        losses = []
+        losses, train_accuracies = [], []
 
         all_elements = list(set(w for s in dataset for w in s))
 
@@ -88,10 +88,11 @@ class SetEmbedding(nn.Module):
                 predictions, y = [], []
 
                 for i, s in enumerate(batch):
-                    predictions.append(self.query(set_embeddings[i], queries[i]))
-                    y.append(torch.tensor([float(w in s) for w in queries[i]],
-                                          dtype=torch.float,
-                                          device=self.device))
+                    if len(queries[i]) > 0:
+                        predictions.append(self.query(set_embeddings[i], queries[i]))
+                        y.append(torch.tensor([float(w in s) for w in queries[i]],
+                                           dtype=torch.float,
+                                           device=self.device))
 
                 loss = F.binary_cross_entropy(torch.cat(predictions),
                                               torch.cat(y))
@@ -102,8 +103,9 @@ class SetEmbedding(nn.Module):
                 p.tick()
                 if p.current_iteration % log_every == 0:
                     acc = (torch.cat(predictions).round() == torch.cat(y)).float().mean()
+                    train_accuracies.append(acc)
                     print(p.format(),
                           'loss = {:.3f}, train_acc = {:.3f}'
                           .format(losses[-1], acc))
 
-        return losses
+        return losses, train_accuracies
