@@ -185,6 +185,10 @@ def batched(l, batch_size):
     for b in range((len(l) + batch_size - 1) // batch_size):
         yield l[b*batch_size:(b+1)*batch_size]
 
+def broadcast_dot(m, v):
+    'torch.dot() broadcasting version'
+    return m.mm(v.view(-1, 1)).squeeze(1)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
 

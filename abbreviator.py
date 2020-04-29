@@ -157,8 +157,7 @@ class AbbreviatorEvaluator:
             successes += len(abbreviation) < len(s)
             total_len += len(s)
             compressed_len += len(abbreviation)
-            if len(abbreviation) < len(s):
-                abbreviations.append({'short': abbreviation, 'long': s})
+            abbreviations.append({'short': abbreviation, 'long': s})
 
             if progress is not None:
                 progress.tick()

@@ -5,6 +5,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from util import broadcast_dot
 
 # Types of copy mechanism
 COPY_CLASSIC = 'classic'
@@ -267,7 +268,3 @@ def get_copy_positions(full_string, subseq, pad_to_length=0):
         i += 1
 
     return ans
-
-def broadcast_dot(m, v):
-    'torch.dot() broadcasting version'
-    return m.mm(v.view(-1, 1)).squeeze(1)
