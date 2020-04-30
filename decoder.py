@@ -1,25 +1,47 @@
 #Seq2Seq decoder model
 
 import math
+from enum import Flag, auto
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from util import broadcast_dot
+from contextual_lstm import ContextualLSTMCell
 
 # Types of copy mechanism
 COPY_CLASSIC = 'classic'
 COPY_SUBSEQ = 'subseq'
 
+class Context(Flag):
+    NONE = 0
+    IMPORTS = auto()
+    IDENTIFIERS = auto()
+
+    def count(self):
+        return sum(1 for v in [self.IMPORTS, self.IDENTIFIERS] if self & v)
+
 class AutoCompleteDecoderModel(nn.Module):
-    def __init__(self, alphabet, hidden_size=100, max_test_length=200, dropout_rate=0.2,
-                 copy=None):
+    def __init__(self, alphabet, hidden_size=100, max_test_length=200,
+                 dropout_rate=0.2, copy=None,
+                 context=Context.NONE, context_embedding_size=128,
+                 context_rank=50):
         super().__init__()
 
         self.hidden_size = hidden_size
         self.encoder_lstm = nn.LSTM(alphabet.embedding_size(), hidden_size, batch_first=True, bidirectional=True)
-        self.decoder_lstm = nn.LSTMCell(
-            hidden_size + alphabet.embedding_size(), hidden_size)
+
+        self.context = context
+        if context == Context.NONE:
+            self.decoder_lstm = nn.LSTMCell(
+                hidden_size + alphabet.embedding_size(), hidden_size)
+        else:
+            self.decoder_lstm = ContextualLSTMCell(
+                    hidden_size + alphabet.embedding_size(),
+                    hidden_size,
+                    context.count() * context_embedding_size,
+                    context_rank)
+
         self.h_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.c_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.attention_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
@@ -38,7 +60,8 @@ class AutoCompleteDecoderModel(nn.Module):
             self.p_gen_state_c_weight = nn.Parameter(torch.zeros(hidden_size), device=device)
             self.p_gen_bias = nn.Parameter(torch.zeros(1),device=device)
 
-    def forward(self, compressed, alphabet, expected=None, return_loss=True):
+    def forward(self, compressed, alphabet,
+                context=None, expected=None, return_loss=True):
         '''Forward pass, for test time if expected is None, otherwise for training.
 
         Encodes the compressed input sentences in C and decodes them using
@@ -61,7 +84,6 @@ class AutoCompleteDecoderModel(nn.Module):
         C_padding_tokens = torch.zeros((C.shape[0], C.shape[1]),
                                         dtype=torch.long,
                                         device=alphabet.device)
-        # import pdb; pdb.set_trace()
         for i in range(B):
             # Everything after string (+ 2 tokens for begin and end) gets set to 1.
             # Used to make attention ignore padding tokens.
@@ -104,8 +126,16 @@ class AutoCompleteDecoderModel(nn.Module):
 
         copy_classic = self.copy is COPY_CLASSIC
 
+        # If using context embeddings, compute context weights for the batch.
+        using_context = (self.context != Context.NONE)
+        if using_context:
+            context_w = self.decoder_lstm.compute_context_weights(context)
+
         while not all_finished:
-            decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state)
+            if not using_context:
+                decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state)
+            else:
+                decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state, context_w)
 
             # decoder_hidden: (B, H)
             # encoder_hidden_states: (B, L, H)
@@ -123,7 +153,7 @@ class AutoCompleteDecoderModel(nn.Module):
             V = self.output_proj(U)
             timestep_out = self.dropout(torch.tanh(V))
             last_output = F.softmax(self.vocab_proj(timestep_out), dim=1)
-            # import pdb; pdb.set_trace()
+
             if copy_classic:
                 p_gen = torch.sigmoid(
                             broadcast_dot(attention_result, self.p_gen_context_weight) +
@@ -188,7 +218,9 @@ class AutoCompleteDecoderModel(nn.Module):
 
 
     def beam_search(self, compressed_string, alphabet, beam_size=2, max_depth=3):
-        B = 1 #batch size
+        # FIXME(gpoesia): Optionally take context in beam-search as well
+
+        B = 1
         C = alphabet.encode_batch([compressed_string])
         C_indices = alphabet.encode_batch_indices([compressed_string])
         encoder_hidden_states, (enc_hn, enc_cn) = self.encoder_lstm(C)
