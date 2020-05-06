@@ -49,6 +49,8 @@ def example_is_valid(context, imports, line):
         return False
 
     try:
+        line.encode('ascii')
+
         for s in context + imports:
             if len(s) > opt.max_name_length:
                 return False
@@ -112,5 +114,5 @@ if __name__ == '__main__':
         for split, examples in dataset.items():
             print('{}: {} examples'.format(split, len(examples)))
 
-        with open('contextualized-lines.json', 'w') as f:
+        with open('contextualized-lines-small.json', 'w') as f:
             json.dump(dataset, f)

@@ -17,10 +17,11 @@ class SetEmbedding(nn.Module):
         self.set_embedding_proj = nn.Linear(2*hidden_size, hidden_size)
         self.set_encoder = nn.LSTM(hidden_size, hidden_size)
         self.alphabet = alphabet.AsciiEmbeddedEncoding(device)
+        self.set_begin_word = '^'
         self.device = device
-        self.to(device)
 
     def embed(self, word_sets):
+        word_sets = [['^'] + s for s in word_sets]
         set_lens = list(map(len, word_sets))
         set_begin = np.cumsum([0] + set_lens)
 
@@ -109,3 +110,17 @@ class SetEmbedding(nn.Module):
                           .format(losses[-1], acc))
 
         return losses, train_accuracies
+
+    def dump(self, path):
+        torch.save(self.state_dict(), path)
+
+    @staticmethod
+    def load(path, hidden_size=128, device=None):
+        if device is None:
+            device = torch.device('cpu')
+
+        semb = SetEmbedding(device, hidden_size=hidden_size)
+        semb.load_state_dict(torch.load(path, map_location=device))
+        semb.to(device)
+
+        return semb

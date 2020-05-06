@@ -1,4 +1,4 @@
-#Seq2Seq decoder model
+# Seq2Seq decoder model
 
 import math
 from enum import Flag, auto
@@ -7,11 +7,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from util import broadcast_dot
+from alphabet import AsciiEmbeddedEncoding
 from contextual_lstm import ContextualLSTMCell
 
-# Types of copy mechanism
-COPY_CLASSIC = 'classic'
-COPY_SUBSEQ = 'subseq'
+class ContextAlgorithm(Flag):
+    NONE = 0
+    CONCAT_CELL = auto()
+    FACTOR_CELL = auto()
 
 class Context(Flag):
     NONE = 0
@@ -22,19 +24,30 @@ class Context(Flag):
         return sum(1 for v in [self.IMPORTS, self.IDENTIFIERS] if self & v)
 
 class AutoCompleteDecoderModel(nn.Module):
-    def __init__(self, alphabet, hidden_size=100, max_test_length=200,
-                 dropout_rate=0.2, copy=None,
-                 context=Context.NONE, context_embedding_size=128,
-                 context_rank=50):
+    def __init__(self, hidden_size=100, max_test_length=200,
+                 dropout_rate=0.2,
+                 context=Context.NONE,
+                 context_algorithm=ContextAlgorithm.CONCAT_CELL,
+                 context_embedding_size=128,
+                 context_rank=50,
+                 device=None):
         super().__init__()
+        self.alphabet = alphabet = AsciiEmbeddedEncoding(device)
 
         self.hidden_size = hidden_size
         self.encoder_lstm = nn.LSTM(alphabet.embedding_size(), hidden_size, batch_first=True, bidirectional=True)
 
         self.context = context
-        if context == Context.NONE:
+        self.context_algorithm = context_algorithm
+
+        if context_algorithm != ContextAlgorithm.FACTOR_CELL:
             self.decoder_lstm = nn.LSTMCell(
-                hidden_size + alphabet.embedding_size(), hidden_size)
+                hidden_size + alphabet.embedding_size() + (
+                    context_embedding_size * context.count()
+                    if context_algorithm == ContextAlgorithm.CONCAT_CELL
+                    else 0
+                    ),
+                hidden_size)
         else:
             self.decoder_lstm = ContextualLSTMCell(
                     hidden_size + alphabet.embedding_size(),
@@ -50,17 +63,11 @@ class AutoCompleteDecoderModel(nn.Module):
         self.dropout_rate = dropout_rate
         self.dropout = nn.Dropout(dropout_rate)
         self.max_test_length = max_test_length
-        self.copy = copy
+        self.device = device
+        if device:
+            self.to(device)
 
-        if copy == COPY_CLASSIC:
-            self.p_gen_context_weight = nn.Parameter(torch.zeros(2*hidden_size), device=alphabet.device)
-            self.p_gen_input_weight = nn.Parameter(
-                    torch.zeros(alphabet.embedding_size() + hidden_size), device=device)
-            self.p_gen_state_h_weight = nn.Parameter(torch.zeros(hidden_size), device=device)
-            self.p_gen_state_c_weight = nn.Parameter(torch.zeros(hidden_size), device=device)
-            self.p_gen_bias = nn.Parameter(torch.zeros(1),device=device)
-
-    def forward(self, compressed, alphabet,
+    def forward(self, compressed,
                 context=None, expected=None, return_loss=True):
         '''Forward pass, for test time if expected is None, otherwise for training.
 
@@ -76,6 +83,7 @@ class AutoCompleteDecoderModel(nn.Module):
                    compressed string.
 
         '''
+        alphabet = self.alphabet
 
         B = len(compressed)
         is_training = expected is not None
@@ -97,16 +105,6 @@ class AutoCompleteDecoderModel(nn.Module):
             E =  alphabet.encode_batch_indices(expected)
             E_emb =  alphabet.encode_batch(expected)
             predictions = []
-            if self.copy == COPY_SUBSEQ:
-                copy_positions = torch.stack([
-                    get_copy_positions(full, c, E.shape[1] - 1)
-                    for full, c in zip(expected, compressed)
-                ], dim=0)
-
-                E[copy_positions] =  alphabet.copy_token_index()
-
-        if not is_training and self.copy == COPY_SUBSEQ:
-            copy_counters = [0 for _ in range(B)]
 
         finished = torch.zeros(B, device=alphabet.device)
         decoded_strings = [[] for _ in range(B)]
@@ -124,16 +122,24 @@ class AutoCompleteDecoderModel(nn.Module):
 
         encoder_hidden_states_proj = self.attention_proj(encoder_hidden_states)
 
-        copy_classic = self.copy is COPY_CLASSIC
-
         # If using context embeddings, compute context weights for the batch.
         using_context = (self.context != Context.NONE)
+        factor_cell = self.context_algorithm == ContextAlgorithm.FACTOR_CELL
+        concat_cell = self.context_algorithm == ContextAlgorithm.CONCAT_CELL
+
         if using_context:
-            context_w = self.decoder_lstm.compute_context_weights(context)
+            if context is None:
+                raise ValueError('Expected a context matrix.')
+            if factor_cell:
+                context_w = self.decoder_lstm.compute_context_weights(context)
 
         while not all_finished:
             if not using_context:
                 decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state)
+            elif concat_cell:
+                decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(
+                        torch.cat([next_input, context], dim=1),
+                        decoder_state)
             else:
                 decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state, context_w)
 
@@ -151,19 +157,20 @@ class AutoCompleteDecoderModel(nn.Module):
                                              encoder_hidden_states), dim=1)
             U = torch.cat([decoder_hidden, attention_result], dim=1)
             V = self.output_proj(U)
-            timestep_out = self.dropout(torch.tanh(V))
-            last_output = F.softmax(self.vocab_proj(timestep_out), dim=1)
 
-            if copy_classic:
-                p_gen = torch.sigmoid(
-                            broadcast_dot(attention_result, self.p_gen_context_weight) +
-                            broadcast_dot(next_input, self.p_gen_input_weight) +
-                            broadcast_dot(decoder_hidden, self.p_gen_state_h_weight) +
-                            broadcast_dot(decoder_cell, self.p_gen_state_c_weight) +
-                            self.p_gen_bias
-                        ).view((-1, 1))
+            timestep_out = self.dropout(V.tanh())
+            proj = self.vocab_proj(timestep_out)
+            last_output = F.softmax(proj, dim=1)
 
-                last_output = (last_output * p_gen).scatter_add(1, C_indices, attention_d * (1 - p_gen))
+            if i == 0:
+                self.last_V = V
+                self.last_V.retain_grad()
+                self.last_timestep_out = timestep_out
+                self.last_timestep_out.retain_grad()
+                self.proj = proj
+                self.proj.retain_grad()
+                self.last_last_output = last_output
+                self.last_last_output.retain_grad()
 
             if is_training:
                 predictions.append(last_output)
@@ -175,19 +182,8 @@ class AutoCompleteDecoderModel(nn.Module):
                 finished[predictions ==  alphabet.end_token_index()] = 1
 
                 for idx in (finished == 0).nonzero():
-                    copy = (self.copy is COPY_SUBSEQ and
-                               predictions[idx] ==  alphabet.copy_token_index())
-
                     decoded_strings[idx].append(
-                             alphabet.index_to_char(predictions[idx])
-                            if not copy
-                            else (compressed[idx][copy_counters[idx]]
-                                  if copy_counters[idx] < len(compressed[idx])
-                                  else '')
-                            )
-
-                    if copy:
-                        copy_counters[idx] += 1
+                             alphabet.index_to_char(predictions[idx]))
 
                 next_input = torch.cat([
                      alphabet.encode_tensor_indices(predictions),
@@ -218,7 +214,7 @@ class AutoCompleteDecoderModel(nn.Module):
 
 
     def beam_search(self, compressed_string, alphabet, beam_size=2, max_depth=3):
-        # FIXME(gpoesia): Optionally take context in beam-search as well
+        # FIXME(gpoesia): Optionally take context in beam search as well.
 
         B = 1
         C = alphabet.encode_batch([compressed_string])
@@ -270,33 +266,41 @@ class AutoCompleteDecoderModel(nn.Module):
         #return list(map(lambda x:x[1], top_k))
         return top_k
 
-    def clone(self, alphabet):
-        c = AutoCompleteDecoderModel(alphabet,
-                                     self.hidden_size,
+    def clone(self):
+        c = AutoCompleteDecoderModel(self.hidden_size,
                                      self.max_test_length,
                                      self.dropout_rate,
-                                     self.copy)
+                                     self.context,
+                                     device=self.device)
         c.load_state_dict(self.state_dict())
-        c.to(alphabet.device)
         return c
 
-def get_copy_positions(full_string, subseq, pad_to_length=0):
-    '''Computes the sequence of copies and insertions needed to get to `full_string` from `subseq`.
+    def dump(self, path):
+        torch.save(self.state_dict(), path)
 
-    Example: to get from acf to abcdef, we need to copy a, insert b, copy c, insert d, insert e, copy f.
+    @staticmethod
+    def load(path, context, hidden_size=512, device=None):
+        if device is None:
+            device = torch.device('cpu')
 
-    @returns a boolean tensor of length max(len(full_string), pad_to_length),
-    where each element is either True if the corresponding character will be copied
-    from the input or False if it should be inserted. In case of multiple solutions,
-    it always prefers to copy first.'''
+        decoder = AutoCompleteDecoderModel(context=context,
+                                           hidden_size=hidden_size,
+                                           device=device)
+        decoder.load_state_dict(torch.load(path, map_location=device))
+        decoder.to(device)
+        decoder.eval()
+        return decoder
 
-    ans = torch.zeros(1 + max(len(full_string), pad_to_length), dtype=torch.bool, device=device)
-    copied = 0
+    def compute_context(self, set_embedding, batch_imports, batch_ids):
+        if self.context:
+            context_tensors = []
 
-    for i, c in enumerate(full_string):
-        if copied < len(subseq) and subseq[copied] == c:
-            ans[i+1] = True
-            copied += 1
-        i += 1
+            if self.context & Context.IMPORTS:
+                context_tensors.append(set_embedding.embed(batch_imports))
 
-    return ans
+            if self.context & Context.IDENTIFIERS:
+                context_tensors.append(set_embedding.embed(batch_ids))
+
+            return torch.cat(context_tensors, dim=1)
+
+        return None

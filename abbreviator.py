@@ -5,6 +5,7 @@ from user import User
 import torch
 import numpy as np
 from util import batched
+import collections
 
 class AbbreviationAlgorithm:
     def generate_alternatives(self, string):
@@ -31,9 +32,11 @@ class EraseSuffixes(AbbreviationAlgorithm):
         return alternatives
 
 class LanguageAbbreviator:
-    def __init__(self, decoder, alphabet, training_set, parameters={}):
-        self.decoder = decoder.clone(alphabet)
-        self.alphabet = alphabet
+    def __init__(self, description, decoder, set_embedding,
+                 training_set, parameters={}):
+        self.description = description
+        self.decoder = decoder.clone()
+        self.set_embedding = set_embedding
         self.training_set = training_set
         self.user = User()
 
@@ -55,14 +58,17 @@ class LanguageAbbreviator:
         self.rehearsal_examples = []
 
     def encode(self, batch):
-        return [self.user.encode(s) for s in batch]
+        batch_l, batch_i, batch_c = zip(*[(r['l'], r['i'], r['c']) for r in batch])
+        ctx = self.decoder.compute_context(self.set_embedding, batch_i, batch_c)
+        return [self.user.encode(s) for s in batch_l], ctx
 
-    def decode(self, batch):
-        return self.decoder(batch, self.alphabet)
+    def decode(self, batch, ctx):
+        return self.decoder(batch, ctx)
 
     def name(self):
-        return ('LanguageAbbreviator(min_val_acc={:.2f}, min_train={}, val_ex={}, lr={}, max_steps={}, rehearsal={})'
-                .format(self.minimum_validation_accuracy,
+        return ('LanguageAbbreviator({}, min_val_acc={:.2f}, min_train={}, val_ex={}, lr={}, max_steps={}, rehearsal={})'
+                .format(self.description,
+                        self.minimum_validation_accuracy,
                         self.minimum_train_examples,
                         self.val_examples,
                         self.learning_rate,
@@ -73,16 +79,18 @@ class LanguageAbbreviator:
         abbreviation = string
         validation_accuracy = 1.0
 
-        examples = list({s for s in self.training_set if s.find(string) != -1})
+        examples = list(s for s in self.training_set if s['l'].find(string) != -1)
 
         if len(examples) < self.minimum_train_examples + self.val_examples:
-            print('Not enough examples for', string)
             return string
 
         train, val = examples[:-self.val_examples], examples[-self.val_examples:]
         initial = self.try_learn_abbreviation(string, abbreviation, train, val)
 
         alternatives = [abbreviation]
+
+        if not initial:
+            return abbreviation
 
         while len(alternatives) > 0:
             success = False
@@ -105,7 +113,7 @@ class LanguageAbbreviator:
         return abbreviation
 
     def try_learn_abbreviation(self, string, abbreviation, training_set, val_set):
-        new_decoder = self.decoder.clone(self.alphabet)
+        new_decoder = self.decoder.clone()
         optimizer = torch.optim.SGD(new_decoder.parameters(), lr=self.learning_rate)
 
         encode = lambda s: self.user.encode(s).replace(string, abbreviation)
@@ -119,9 +127,14 @@ class LanguageAbbreviator:
             batch.extend(random.sample(self.rehearsal_examples, min(len(self.rehearsal_examples),
                                                                         self.rehearsal_batch_size)))
 
-            batch_encoded = [encode(s) for s in batch]
+            original = [s['l'] for s in batch]
+            batch_encoded = [encode(s) for s in original]
+            batch_imports, batch_ids = zip(*[(s['i'], s['c']) for s in batch])
+            ctx = new_decoder.compute_context(self.set_embedding,
+                                              batch_imports,
+                                              batch_ids)
 
-            loss = new_decoder(batch_encoded, self.alphabet, batch).mean()
+            loss = new_decoder(batch_encoded, ctx, original).mean()
             loss.backward()
 
             optimizer.step()
@@ -130,8 +143,13 @@ class LanguageAbbreviator:
             val_predictions = []
 
             for val_batch in batched(val_set, self.batch_size):
-                predictions = new_decoder([encode(s) for s in val_set], self.alphabet)
-                val_predictions.extend(p == s for p, s in zip(predictions, val_batch))
+                val_l, val_i, val_c = zip(*[(s['l'], s['i'], s['c'])
+                                            for s in val_batch])
+                val_batch_encoded = [encode(l) for l in val_l]
+                val_ctx = new_decoder.compute_context(self.set_embedding,
+                                                      val_i, val_c)
+                predictions = new_decoder(val_batch_encoded, val_ctx)
+                val_predictions.extend(p == s for p, s in zip(predictions, val_l))
 
             val_acc = np.mean(val_predictions)
 
@@ -165,8 +183,8 @@ class AbbreviatorEvaluator:
         eval_successes, eval_len, eval_compressed_len, eval_examples = 0, 0, 0, []
 
         for batch in batched(self.evaluation_set, self.batch_size):
-            encoded = abbreviator.encode(batch)
-            decoded = abbreviator.decode(encoded)
+            encoded, ctx = abbreviator.encode(batch)
+            decoded = abbreviator.decode(encoded, ctx)
             eval_examples.extend(zip(batch, encoded, decoded))
             eval_len += sum(len(s) for s in batch)
             eval_compressed_len += sum(len(s) for s in encoded)
@@ -180,3 +198,54 @@ class AbbreviatorEvaluator:
             'abbreviations': abbreviations,
             'abbreviation_compression': 1 - (compressed_len / total_len),
         }
+
+def split_tokens(s):
+    '''Splits the string s into identifiers and non-identifiers.
+    Identifiers always come into odd positions, and non-identifiers
+    in even positions.
+    '''
+
+    t, last_t = [], []
+    in_id = False
+    for c in s:
+        if c.isidentifier() or (in_id and c.isalnum()):
+            if in_id:
+                last_t.append(c)
+            else:
+                t.append(''.join(last_t))
+                in_id = True
+                last_t = [c]
+        else:
+            if in_id:
+                t.append(''.join(last_t))
+                in_id = False
+                last_t = [c]
+            else:
+                last_t.append(c)
+    if len(last_t):
+        t.append(''.join(last_t))
+    return t
+
+def find_common_identifiers(dataset, min_length=2, max_length=50):
+    frequencies = collections.Counter()
+
+    for s in dataset:
+        tokens = split_tokens(s['l'])
+
+        for i, t in enumerate(tokens):
+            if i % 2 == 1:
+                current_id = []
+                for j in range(i, len(tokens)):
+                    if j % 2 == 0:
+                        if tokens[j] != '.':
+                            break
+
+                    current_id.append(tokens[j])
+                    if j % 2 == 1:
+                        frequencies[''.join(current_id)] += 1
+
+    ranked = [(id, f, len(id)*f) for id, f in frequencies.most_common()
+              if min_length <= len(id) <= max_length]
+    ranked.sort(key=lambda r: r[2], reverse=True)
+
+    return ranked
