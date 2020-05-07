@@ -68,13 +68,13 @@ def train(encoder,
 
             batch_l, batch_c, batch_i = zip(*[(r['l'], r['c'], r['i'])
                                               for r in batch])
-            ctx = decoder.compute_context(set_embedding, batch_i, batch_c)
+            ctx = decoder.compute_context(batch_i, batch_c, set_embedding)
             lengths = torch.tensor([len(i) for i in batch_l], device=device)
             optimizer_dec.zero_grad()
 
             encoded_batch = encoder.encode_batch(batch_l)
             per_prediction_loss = decoder(
-                    compressed=encoded_batch, 
+                    compressed=encoded_batch,
                     context=ctx,
                     expected=batch_l)
             loss = (per_prediction_loss.sum(dim=1)/(lengths+1)).mean()

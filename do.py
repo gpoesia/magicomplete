@@ -156,15 +156,23 @@ def train_set_embedding(
     print('Last accuracy:', acc[-1])
 
 def train_decoders(contextual_dataset_path,
-                   set_embedding_path, 
+                   set_embedding_path,
                    device,
+                   contexts_considered,
                    output_prefix):
+
+    print('Using device', device)
     print('Loading dataset...')
 
     with open(contextual_dataset_path) as f:
         dataset = json.load(f)
 
-    set_embedding = SetEmbedding.load(set_embedding_path, device=device)
+    if set_embedding_path is not None:
+        print('Using ConcatCell with pre-trained set embedding.')
+        set_embedding = SetEmbedding.load(set_embedding_path, device=device)
+    else:
+        print('Training with Context CNN end-to-end')
+        set_embedding = None
 
     context_combinations = [
             Context.IMPORTS | Context.IDENTIFIERS,
@@ -173,22 +181,30 @@ def train_decoders(contextual_dataset_path,
             Context.NONE,
             ]
 
+    contexts_considered = list(map(int, contexts_considered.split(',')))
+
     for i, ctx in enumerate(context_combinations):
+        if len(contexts_considered) and ctx.value not in contexts_considered:
+            continue
+
         print('{}/{} Training with context = {}'.format(
               i+1, len(context_combinations), str(ctx)))
         encoder = baseline.UniformEncoder(0.7)
         decoder = AutoCompleteDecoderModel(
                 hidden_size=512,
                 context=ctx,
-                context_algorithm=ContextAlgorithm.CONCAT_CELL,
+                context_algorithm=(
+                    ContextAlgorithm.CONCAT_CELL
+                                   if set_embedding_path is not None
+                                   else ContextAlgorithm.CNN),
                 device=device)
         parameters = {
             'learning_rate': 0.0005,
-            'batch_size': 128,
-            'epochs': 3,
+            'batch_size': 8,
+            'epochs': 15,
             'verbose': True,
             'context': ctx.value,
-            'log_every': 100,
+            'log_every': 1,
         }
 
         output_path = '{}_ctx{}.model'.format(output_prefix, ctx.value)
@@ -196,8 +212,8 @@ def train_decoders(contextual_dataset_path,
         loss_history = train(encoder,
                              decoder,
                              set_embedding,
-                             dataset, 
-                             parameters, 
+                             dataset,
+                             parameters,
                              device,
                              output_path)
         print('Saved', output_path)
@@ -269,7 +285,7 @@ def run_abbreviator_experiment(
         LanguageAbbreviator(
             'ctx=imports+identifiers',
             AutoCompleteDecoderModel.load(
-                'models/decoder_ctx3.model', 
+                'models/decoder_ctx3.model',
                 Context.IMPORTS | Context.IDENTIFIERS,
                 device=device),
             set_embedding,
@@ -288,7 +304,7 @@ def run_abbreviator_experiment(
         results[ab.name()] = ab_results = evaluator.evaluate(ab, p)
         ab_summary = ('{} - accuracy: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
                     .format(ab.name(),
-                            100*ab_results['accuracy'], 
+                            100*ab_results['accuracy'],
                             100*ab_results['eval_compression'],
                             100*ab_results['abbreviation_compression']))
         summary += ab_summary
@@ -298,7 +314,7 @@ def run_abbreviator_experiment(
 
     with open(path, 'w') as f:
         json.dump(results, f)
-        
+
     print('Language Abbreviator ({} abbreviations) experiment finished. Results saved to {}. Summary: \n{}'
                  .format(len(targets), path, summary))
 
@@ -329,6 +345,8 @@ if __name__ == '__main__':
                         help='Path to dataset with contextualized lines.')
     parser.add_argument('--set-embedding',
                         help='Path to pre-trained Set Embedding model.')
+    parser.add_argument('--contexts',
+                        help='Comma-separated list of context flags to consider. Empty means all.')
     parser.add_argument('-o', '--output',
                         help='Path to the output file.')
     parser.add_argument('--device',
@@ -358,6 +376,7 @@ if __name__ == '__main__':
                 args.contextual_dataset,
                 args.set_embedding,
                 torch.device(args.device),
+                args.contexts,
                 args.output)
     elif args.train_abbreviator:
         run_abbreviator_experiment(

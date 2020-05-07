@@ -9,11 +9,13 @@ import torch.nn.functional as F
 from util import broadcast_dot
 from alphabet import AsciiEmbeddedEncoding
 from contextual_lstm import ContextualLSTMCell
+from cnn_set_embedding import CNNSetEmbedding
 
 class ContextAlgorithm(Flag):
     NONE = 0
     CONCAT_CELL = auto()
     FACTOR_CELL = auto()
+    CNN = auto()
 
 class Context(Flag):
     NONE = 0
@@ -28,7 +30,7 @@ class AutoCompleteDecoderModel(nn.Module):
                  dropout_rate=0.2,
                  context=Context.NONE,
                  context_algorithm=ContextAlgorithm.CONCAT_CELL,
-                 context_embedding_size=128,
+                 context_embedding_size=50,
                  context_rank=50,
                  device=None):
         super().__init__()
@@ -44,7 +46,7 @@ class AutoCompleteDecoderModel(nn.Module):
             self.decoder_lstm = nn.LSTMCell(
                 hidden_size + alphabet.embedding_size() + (
                     context_embedding_size * context.count()
-                    if context_algorithm == ContextAlgorithm.CONCAT_CELL
+                    if context_algorithm in (ContextAlgorithm.CONCAT_CELL, ContextAlgorithm.CNN)
                     else 0
                     ),
                 hidden_size)
@@ -55,6 +57,9 @@ class AutoCompleteDecoderModel(nn.Module):
                     context.count() * context_embedding_size,
                     context_rank)
 
+        if context_algorithm == ContextAlgorithm.CNN:
+            self.context_cnn = CNNSetEmbedding(device, context_embedding_size)
+
         self.h_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.c_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.attention_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
@@ -63,12 +68,16 @@ class AutoCompleteDecoderModel(nn.Module):
         self.dropout_rate = dropout_rate
         self.dropout = nn.Dropout(dropout_rate)
         self.max_test_length = max_test_length
+
         self.device = device
         if device:
             self.to(device)
 
-    def forward(self, compressed,
-                context=None, expected=None, return_loss=True):
+    def forward(self,
+                compressed,
+                context = None,
+                expected = None,
+                return_loss = True):
         '''Forward pass, for test time if expected is None, otherwise for training.
 
         Encodes the compressed input sentences in C and decodes them using
@@ -126,6 +135,7 @@ class AutoCompleteDecoderModel(nn.Module):
         using_context = (self.context != Context.NONE)
         factor_cell = self.context_algorithm == ContextAlgorithm.FACTOR_CELL
         concat_cell = self.context_algorithm == ContextAlgorithm.CONCAT_CELL
+        cnn_context = self.context_algorithm == ContextAlgorithm.CNN
 
         if using_context:
             if context is None:
@@ -136,7 +146,7 @@ class AutoCompleteDecoderModel(nn.Module):
         while not all_finished:
             if not using_context:
                 decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state)
-            elif concat_cell:
+            elif concat_cell or cnn_context:
                 decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(
                         torch.cat([next_input, context], dim=1),
                         decoder_state)
@@ -291,16 +301,21 @@ class AutoCompleteDecoderModel(nn.Module):
         decoder.eval()
         return decoder
 
-    def compute_context(self, set_embedding, batch_imports, batch_ids):
+    def compute_context(self, batch_imports, batch_ids, set_embedding=None):
         if self.context:
             context_tensors = []
 
             if self.context & Context.IMPORTS:
-                context_tensors.append(set_embedding.embed(batch_imports))
+                context_tensors.append(
+                    self.context_cnn(batch_imports)
+                    if self.context_algorithm == ContextAlgorithm.CNN
+                    else set_embedding.embed(batch_imports))
 
             if self.context & Context.IDENTIFIERS:
-                context_tensors.append(set_embedding.embed(batch_ids))
+                context_tensors.append(
+                    self.context_cnn(batch_ids)
+                    if self.context_algorithm == ContextAlgorithm.CNN
+                    else set_embedding.embed(batch_ids))
 
             return torch.cat(context_tensors, dim=1)
-
         return None
