@@ -174,21 +174,19 @@ def train_decoders(contextual_dataset_path,
         print('Training with Context CNN end-to-end')
         set_embedding = None
 
-    context_combinations = [
+    all_contexts = [
             Context.IMPORTS | Context.IDENTIFIERS,
             Context.IMPORTS,
             Context.IDENTIFIERS,
             Context.NONE,
             ]
 
-    contexts_considered = list(map(int, contexts_considered.split(',')))
+    contexts_considered = list(map(int, contexts_considered.split(','))) or all_contexts
 
-    for i, ctx in enumerate(context_combinations):
-        if len(contexts_considered) and ctx.value not in contexts_considered:
-            continue
-
+    for i, ctx_value in enumerate(contexts_considered):
+        ctx = Context(ctx_value)
         print('{}/{} Training with context = {}'.format(
-              i+1, len(context_combinations), str(ctx)))
+              i+1, len(contexts_considered), str(ctx)))
         encoder = baseline.UniformEncoder(0.7)
         decoder = AutoCompleteDecoderModel(
                 hidden_size=512,
@@ -200,11 +198,11 @@ def train_decoders(contextual_dataset_path,
                 device=device)
         parameters = {
             'learning_rate': 0.0005,
-            'batch_size': 8,
-            'epochs': 15,
+            'batch_size': 128,
+            'epochs': 10,
             'verbose': True,
             'context': ctx.value,
-            'log_every': 1,
+            'log_every': 100,
         }
 
         output_path = '{}_ctx{}.model'.format(output_prefix, ctx.value)
@@ -345,8 +343,8 @@ if __name__ == '__main__':
                         help='Path to dataset with contextualized lines.')
     parser.add_argument('--set-embedding',
                         help='Path to pre-trained Set Embedding model.')
-    parser.add_argument('--contexts',
-                        help='Comma-separated list of context flags to consider. Empty means all.')
+    parser.add_argument('--contexts', default='',
+                        help='Comma-separated list of context flags to consider. Default: all.')
     parser.add_argument('-o', '--output',
                         help='Path to the output file.')
     parser.add_argument('--device',
