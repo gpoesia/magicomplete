@@ -46,7 +46,7 @@ class CNNSetEmbedding(nn.Module):
         word_embeddings = self.embed_words(encoded_chars)
         return broadcast_dot(word_embeddings, set_embedding).sigmoid()
 
-    def train(self, dataset, parameters={}):
+    def train_model(self, dataset, parameters={}):
         lr = parameters.get('lr' , 1e-3)
         epochs = parameters.get('epochs' , 5)
         init_scale = parameters.get('init_scale' , 1e-2)
