@@ -46,12 +46,6 @@ def train(encoder,
     for p in decoder.parameters():
         p.data.uniform_(-init_scale, init_scale)
 
-    # Initialize LSTM contextual adaptation to start minimal and
-    # let it increase during training.
-#    if decoder.context and :
-#        for p in decoder.decoder_lstm.contextual_parameters():
-#            p.data.uniform_(-init_scale / 10.0, init_scale / 10.0)
-
     examples_processed = 0
     total_batches = epochs * math.ceil(len(training_set) / batch_size) if epochs else math.inf
 

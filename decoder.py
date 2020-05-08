@@ -289,13 +289,14 @@ class AutoCompleteDecoderModel(nn.Module):
         torch.save(self.state_dict(), path)
 
     @staticmethod
-    def load(path, context, hidden_size=512, device=None):
+    def load(path, context, context_algorithm, hidden_size=512, device=None):
         if device is None:
             device = torch.device('cpu')
 
         decoder = AutoCompleteDecoderModel(context=context,
                                            hidden_size=hidden_size,
-                                           device=device)
+                                           device=device,
+                                           context_algorithm=context_algorithm)
         decoder.load_state_dict(torch.load(path, map_location=device))
         decoder.to(device)
         decoder.eval()

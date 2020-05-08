@@ -237,7 +237,9 @@ def run_abbreviator_experiment(
         dataset_path,
         set_embedding_path,
         n_targets,
-        device):
+        device,
+        decoders_prefix,
+        contexts):
     print('Loading dataset {}...'.format(dataset_path))
     with open(dataset_path) as f:
         ds = json.load(f)
@@ -246,7 +248,9 @@ def run_abbreviator_experiment(
 
     targets = build_abbreviation_targets(n_targets, ds['train'])
 
-    set_embedding = SetEmbedding.load(set_embedding_path, device=device)
+    set_embedding = (SetEmbedding.load(set_embedding_path, device=device)
+                     if set_embedding_path is not None
+                     else None)
 
     results = {}
     evaluator = AbbreviatorEvaluator(targets, ds['dev'])
@@ -256,7 +260,7 @@ def run_abbreviator_experiment(
         LanguageAbbreviator(
             'ctx=nil',
             AutoCompleteDecoderModel.load(
-                'models/decoder_ctx0.model', Context.NONE, device=device),
+                decoders_prefix + '_ctx0.model', Context.NONE, ContextAlgorithm.CNN, device=device),
             set_embedding,
             ds['train'],
             { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
@@ -265,7 +269,7 @@ def run_abbreviator_experiment(
         LanguageAbbreviator(
             'ctx=imports',
             AutoCompleteDecoderModel.load(
-                'models/decoder_ctx1.model', Context.IMPORTS, device=device),
+                decoders_prefix + '_ctx1.model', Context.IMPORTS, ContextAlgorithm.CNN, device=device),
             set_embedding,
             ds['train'],
             { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
@@ -274,7 +278,7 @@ def run_abbreviator_experiment(
         LanguageAbbreviator(
             'ctx=identifiers',
             AutoCompleteDecoderModel.load(
-                'models/decoder_ctx2.model', Context.IDENTIFIERS, device=device),
+                decoders_prefix + '_ctx2.model', Context.IDENTIFIERS, ContextAlgorithm.CNN, device=device),
             set_embedding,
             ds['train'],
             { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
@@ -283,8 +287,9 @@ def run_abbreviator_experiment(
         LanguageAbbreviator(
             'ctx=imports+identifiers',
             AutoCompleteDecoderModel.load(
-                'models/decoder_ctx3.model',
+                decoders_prefix + '_ctx3.model',
                 Context.IMPORTS | Context.IDENTIFIERS,
+                ContextAlgorithm.CNN,
                 device=device),
             set_embedding,
             ds['train'],
@@ -293,7 +298,8 @@ def run_abbreviator_experiment(
         ),
     ]
 
-    abbreviators = [abbreviators[0], abbreviators[3]]
+    contexts = list(map(int, contexts.split(','))) or list(range(4))
+    abbreviators = [a for a in abbreviators if a.decoder.context.value in contexts]
 
     p = Progress(len(abbreviators) * len(targets), print_every=5)
 
@@ -345,6 +351,8 @@ if __name__ == '__main__':
                         help='Path to pre-trained Set Embedding model.')
     parser.add_argument('--contexts', default='',
                         help='Comma-separated list of context flags to consider. Default: all.')
+    parser.add_argument('--decoders',
+                        help='Prefix of path to decoders.')
     parser.add_argument('-o', '--output',
                         help='Path to the output file.')
     parser.add_argument('--device',
@@ -382,4 +390,6 @@ if __name__ == '__main__':
                 args.set_embedding,
                 args.abbreviations,
                 torch.device(args.device),
+                args.decoders,
+                args.contexts,
         )
