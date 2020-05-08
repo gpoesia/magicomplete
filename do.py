@@ -276,15 +276,6 @@ def run_abbreviator_experiment(
                 'minimum_validation_accuracy': 0.8 },
         ),
         LanguageAbbreviator(
-            'ctx=identifiers',
-            AutoCompleteDecoderModel.load(
-                decoders_prefix + '_ctx2.model', Context.IDENTIFIERS, ContextAlgorithm.CNN, device=device),
-            set_embedding,
-            ds['train'],
-            { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
-                'minimum_validation_accuracy': 0.8 },
-        ),
-        LanguageAbbreviator(
             'ctx=imports+identifiers',
             AutoCompleteDecoderModel.load(
                 decoders_prefix + '_ctx3.model',

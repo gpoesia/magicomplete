@@ -281,6 +281,7 @@ class AutoCompleteDecoderModel(nn.Module):
                                      self.max_test_length,
                                      self.dropout_rate,
                                      self.context,
+                                     self.context_algorithm,
                                      device=self.device)
         c.load_state_dict(self.state_dict())
         return c

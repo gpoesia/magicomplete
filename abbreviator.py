@@ -59,7 +59,7 @@ class LanguageAbbreviator:
 
     def encode(self, batch):
         batch_l, batch_i, batch_c = zip(*[(r['l'], r['i'], r['c']) for r in batch])
-        ctx = self.decoder.compute_context(self.set_embedding, batch_i, batch_c)
+        ctx = self.decoder.compute_context(batch_i, batch_c, self.set_embedding)
         return [self.user.encode(s) for s in batch_l], ctx
 
     def decode(self, batch, ctx):
@@ -130,9 +130,9 @@ class LanguageAbbreviator:
             original = [s['l'] for s in batch]
             batch_encoded = [encode(s) for s in original]
             batch_imports, batch_ids = zip(*[(s['i'], s['c']) for s in batch])
-            ctx = new_decoder.compute_context(self.set_embedding,
-                                              batch_imports,
-                                              batch_ids)
+            ctx = new_decoder.compute_context(batch_imports,
+                                              batch_ids,
+                                              self.set_embedding)
 
             loss = new_decoder(batch_encoded, ctx, original).mean()
             loss.backward()
@@ -146,8 +146,7 @@ class LanguageAbbreviator:
                 val_l, val_i, val_c = zip(*[(s['l'], s['i'], s['c'])
                                             for s in val_batch])
                 val_batch_encoded = [encode(l) for l in val_l]
-                val_ctx = new_decoder.compute_context(self.set_embedding,
-                                                      val_i, val_c)
+                val_ctx = new_decoder.compute_context(val_i, val_c, self.set_embedding)
                 predictions = new_decoder(val_batch_encoded, val_ctx)
                 val_predictions.extend(p == s for p, s in zip(predictions, val_l))
 
@@ -186,9 +185,9 @@ class AbbreviatorEvaluator:
             encoded, ctx = abbreviator.encode(batch)
             decoded = abbreviator.decode(encoded, ctx)
             eval_examples.extend(zip(batch, encoded, decoded))
-            eval_len += sum(len(s) for s in batch)
+            eval_len += sum(len(s['l']) for s in batch)
             eval_compressed_len += sum(len(s) for s in encoded)
-            eval_successes += sum(o == d for o, d in zip(batch, decoded))
+            eval_successes += sum(o['l'] == d for o, d in zip(batch, decoded))
 
         return {
             'accuracy': eval_successes / len(self.evaluation_set),
