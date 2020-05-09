@@ -17,6 +17,16 @@ class ContextAlgorithm(Flag):
     FACTOR_CELL = auto()
     CNN = auto()
 
+    @staticmethod
+    def parse(s):
+        return ({
+            'NONE': ContextAlgorithm.NONE,
+            'FACTOR_CELL': ContextAlgorithm.FACTOR_CELL,
+            'CONCAT_CELL': ContextAlgorithm.CONCAT_CELL,
+            'CNN': ContextAlgorithm.CNN,
+            }).get(s)
+
+
 class Context(Flag):
     NONE = 0
     IMPORTS = auto()
@@ -25,19 +35,32 @@ class Context(Flag):
     def count(self):
         return sum(1 for v in [self.IMPORTS, self.IDENTIFIERS] if self & v)
 
+    @staticmethod
+    def parse(s):
+        return ({
+            'NONE': Context.NONE,
+            'IMPORTS': Context.IMPORTS,
+            'IDENTIFIERS': Context.IDENTIFIERS,
+            'IMPORTS+IDENTIFIERS': Context.IMPORTS | Context.IDENTIFIERS,
+            }).get(s)
+
 class AutoCompleteDecoderModel(nn.Module):
-    def __init__(self, hidden_size=100, max_test_length=200,
-                 dropout_rate=0.2,
-                 context=Context.NONE,
-                 context_algorithm=ContextAlgorithm.CONCAT_CELL,
-                 context_embedding_size=50,
-                 context_rank=50,
-                 device=None):
+    def __init__(self, params, device=None):
         super().__init__()
+
+        hidden_size = params.get('hidden_size', 100)
+        max_test_length = params.get('max_test_length', 200)
+        dropout_rate = params.get('dropout_rate', 0.2)
+        context = Context.parse(params.get('context', 'NONE'))
+        context_algorithm = ContextAlgorithm.parse(params.get('context_algorithm', 'NONE'))
+        context_embedding_size = params.get('context_embedding_size', 50)
+        context_rank = params.get('context_rank', 50)
+
         self.alphabet = alphabet = AsciiEmbeddedEncoding(device)
 
         self.hidden_size = hidden_size
-        self.encoder_lstm = nn.LSTM(alphabet.embedding_size(), hidden_size, batch_first=True, bidirectional=True)
+        self.encoder_lstm = nn.LSTM(alphabet.embedding_size(), hidden_size,
+                                    batch_first=True, bidirectional=True)
 
         self.context = context
         self.context_algorithm = context_algorithm

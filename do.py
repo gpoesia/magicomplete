@@ -19,7 +19,7 @@ import random
 from abbreviation import UniformAbbreviation
 from abbreviator import *
 from slack import send_message
-
+from run_tracker import RunTracker
 
 def precompute_interactions(dataset, language, new_convention_every, one_convention=False):
     dataset = load_dataset(dataset)[language]['train']
@@ -155,66 +155,48 @@ def train_set_embedding(
     print('Last loss:', loss[-1])
     print('Last accuracy:', acc[-1])
 
-def train_decoders(contextual_dataset_path,
-                   set_embedding_path,
+def train_decoders(params_path,
                    device,
-                   contexts_considered,
-                   output_prefix):
-
+                   contexts_to_run):
     print('Using device', device)
+    with open(params_path) as f:
+        params = json.load(f)
+
     print('Loading dataset...')
 
-    with open(contextual_dataset_path) as f:
+    with open(params['dataset']) as f:
         dataset = json.load(f)
 
-    if set_embedding_path is not None:
+    if params.get('initial_set_embedding') is not None:
         print('Using ConcatCell with pre-trained set embedding.')
-        set_embedding = SetEmbedding.load(set_embedding_path, device=device)
+        set_embedding = SetEmbedding.load(params.get('initial_set_embedding'), device=device)
     else:
         print('Training with Context CNN end-to-end')
         set_embedding = None
 
-    all_contexts = [
-            Context.IMPORTS | Context.IDENTIFIERS,
-            Context.IMPORTS,
-            Context.IDENTIFIERS,
-            Context.NONE,
-            ]
+    contexts_to_run = contexts_to_run.split(',')
 
-    contexts_considered = list(map(int, contexts_considered.split(','))) or all_contexts
 
-    for i, ctx_value in enumerate(contexts_considered):
-        ctx = Context(ctx_value)
+    for i, ctx_value in enumerate(contexts_to_run):
+        params['decoder']['context'] = ctx_value
+
         print('{}/{} Training with context = {}'.format(
-              i+1, len(contexts_considered), str(ctx)))
-        encoder = baseline.UniformEncoder(0.7)
-        decoder = AutoCompleteDecoderModel(
-                hidden_size=512,
-                context=ctx,
-                context_algorithm=(
-                    ContextAlgorithm.CONCAT_CELL
-                                   if set_embedding_path is not None
-                                   else ContextAlgorithm.CNN),
-                device=device)
-        parameters = {
-            'learning_rate': 0.0005,
-            'batch_size': 128,
-            'epochs': 5,
-            'verbose': True,
-            'context': ctx.value,
-            'log_every': 100,
-        }
+              i+1, len(contexts_to_run), ctx_value))
+        encoder = baseline.create_encoder(params['encoder']['type'], params['encoder']['params'])
+        decoder = AutoCompleteDecoderModel(params['decoder'], device)
 
-        output_path = '{}_ctx{}.model'.format(output_prefix, ctx.value)
+        tracker = RunTracker(decoder, params)
+        tracker.start()
 
-        loss_history = train(encoder,
-                             decoder,
-                             set_embedding,
-                             dataset,
-                             parameters,
-                             device,
-                             output_path)
-        print('Saved', output_path)
+        train(encoder,
+              decoder,
+              set_embedding,
+              dataset,
+              params,
+              device,
+              tracker)
+
+        tracker.close()
 
 def build_abbreviation_targets(n_abbreviations, dataset):
     candidates = find_common_identifiers(dataset)
@@ -326,7 +308,7 @@ def run_abbreviator_experiment(
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
 
-    parser.add_argument('--seed', default='conadcomplete', help='Random seed')
+    parser.add_argument('--seed', help='Random seed')
     parser.add_argument('--language', default='Python', help='Programming Language to use (Python|Haskell|Java).')
     parser.add_argument('--dataset', default='medium', help='Dataset to use')
     parser.add_argument('--oneshot-dataset', help='One-shot dataset to use')
@@ -361,10 +343,13 @@ if __name__ == '__main__':
                         help='Device to use for PyTorch.')
     parser.add_argument('--epochs', type=int, default=1,
                         help='Number of epochs to train for.')
+    parser.add_argument('--params',
+                        help='JSON file to read parameters from.')
 
     args = parser.parse_args()
 
-    random.seed(args.seed)
+    if args.seed is not None:
+        random.seed(args.seed)
 
     if args.precompute_interactions:
         precompute_interactions(args.dataset, args.language, args.new_convention_every, args.one_convention)
@@ -380,11 +365,10 @@ if __name__ == '__main__':
                 args.epochs)
     elif args.train_decoders:
         train_decoders(
-                args.contextual_dataset,
-                args.set_embedding,
+                args.params,
                 torch.device(args.device),
                 args.contexts,
-                args.output)
+        )
     elif args.train_abbreviator:
         run_abbreviator_experiment(
                 args.dataset,

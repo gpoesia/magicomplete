@@ -22,12 +22,12 @@ class RunTracker:
         self.timer = None
 
     def start(self):
-        self.timer = threading.Timer(60, self.flush)
-        self.timer.start()
         self.data['tracker:start-time'] = datetime.datetime.now().isoformat()
-
         self.data['params'] = self.parameters
         self.writer.add_text('params', pformat(self.parameters))
+        self.periodic_flush()
+
+        print('Started run', self.run_id)
 
     def step(self):
         self.current_step += 1
@@ -50,11 +50,16 @@ class RunTracker:
         self.model.dump('models/{}_check{}.model'.format(self.run_id, self.n_checkpoints))
 
     def loss_converged(self, loss_tag, window_size=10000, minimum_improvement=0.98):
-        losses = self.data.get(loss_tag) or []
+        losses = [r['value'] for r in (self.data.get(loss_tag) or [])]
         if len(losses) < 2*window_size:
             return False
         return (np.mean(losses[-window_size:]) >
                 minimum_improvement * np.mean(losses[-2*window_size:-window_size]))
+
+    def periodic_flush(self):
+        self.flush()
+        self.timer = threading.Timer(60, self.periodic_flush)
+        self.timer.start()
 
     def flush(self):
         self.writer.flush()
@@ -70,3 +75,5 @@ class RunTracker:
         self.model.dump('models/{}.model'.format(self.run_id))
         self.flush()
         self.writer.close()
+
+        print('Finished run', self.run_id)

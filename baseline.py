@@ -6,17 +6,74 @@ from collections import Counter
 import pprint
 from random import randrange
 
+def create_encoder(type, params):
+    if type == 'Prefixes':
+        return PrefixesEncoder(params)
+    elif type == 'Uniform':
+        return UniformEncoder(params)
+
 class UniformEncoder(AutoCompleteEncoder):
     'Encodes a string by removing characters uniformly at random with fixed probability.'
 
-    def __init__(self, removal_probability=0.5):
-        self.removal_probability = removal_probability
+    def __init__(self, params):
+        self.removal_probability = params['p']
 
     def name(self):
         return 'UniformEncoder({:.2f})'.format(self.removal_probability)
 
-    def encode(self, s):
-        return ''.join(c for c in s if random.random() < self.removal_probability)
+    def encode(self, s, rnd=random):
+        return ''.join(c for c in s if rnd.random() < self.removal_probability)
+
+    def encode_batch(self, b):
+        return [self.encode(s) for s in b]
+
+    def is_optimizeable(self):
+        return False
+
+class PrefixesEncoder(AutoCompleteEncoder):
+    'Shortens a string by keeping mostly prefixes of some identifiers.'
+
+    def __init__(self, params):
+        '''
+        Params:
+        - drop:   uniform drop applied before identifiers are shortened.
+        - lambda: exponential parameter used to drop characters. First character
+                  in an identifier is kept with probability 1, the second with
+                  probability lambda^1, the third with probability lambda^2, and so on.
+        - p:      probability of shortening an identifier.
+        '''
+        self.lambda_ = params['lambda']
+        self.p = params['p']
+        self.drop = params['drop']
+
+    def name(self):
+        return 'Prefixes(lambda={:.2f}, p={:.2f}, drop={:.2f})'.format(
+            self.lambda_, self.p, self.drop)
+
+    def encode(self, s, rnd=random):
+        index_in_identifier = -1
+        dropping = False
+
+        chars = []
+
+        for c in s:
+            if rnd.random() < self.drop:
+                continue
+
+            if c.isidentifier() or index_in_identifier >= 0 and c.isdigit():
+                index_in_identifier += 1
+                if index_in_identifier == 0:
+                    dropping = rnd.random() < self.p
+            else:
+                index_in_identifier = -1
+                dropping = False
+
+            if dropping and rnd.random() > self.lambda_ ** index_in_identifier:
+                continue
+
+            chars.append(c)
+
+        return ''.join(chars)
 
     def encode_batch(self, b):
         return [self.encode(s) for s in b]

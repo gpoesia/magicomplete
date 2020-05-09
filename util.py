@@ -3,6 +3,7 @@
 import datetime
 import time
 import numpy as np
+import random
 
 class Progress:
     def __init__(self, total_iterations=None, timeout=None, print_every=None):
@@ -76,7 +77,7 @@ def broadcast_dot(m, v):
 
 def trim_str_to_id(s):
     first_id, last_id = None, None
-    
+
     for i, c in enumerate(s):
         if c.isidentifier():
             if first_id is None:
@@ -86,3 +87,7 @@ def trim_str_to_id(s):
     if first_id is None:
         return None
     return s[first_id:(last_id + 1)]
+
+def random_hex_string(k=5):
+    CHARS = '0123456789abcdef'
+    return ''.join(random.choices(CHARS, k=k))
