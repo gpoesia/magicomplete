@@ -55,6 +55,8 @@ def train(encoder,
 
     e = 0
 
+    random.shuffle(training_set)
+
     while not p.timed_out() if timeout else e < epochs:
         for i, batch in enumerate(batched(training_set, batch_size)):
             if p.timed_out():
