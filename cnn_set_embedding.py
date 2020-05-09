@@ -16,12 +16,7 @@ class CNNSetEmbedding(nn.Module):
         self.alphabet = AsciiEmbeddedEncoding(device)
         self.words_conv = nn.Conv1d(self.alphabet.embedding_size(), output_size,
                               kernel_size, padding=(kernel_size // 2))
-        self.word_gate = nn.Linear(output_size, output_size)
-        self.word_proj = nn.Linear(output_size, output_size)
-
         self.set_conv = nn.Conv1d(output_size, output_size, kernel_size=1, padding=0)
-        self.set_gate = nn.Linear(output_size, output_size)
-        self.set_proj = nn.Linear(output_size, output_size)
 
     def embed_words(self, encoded_chars):
         words, _ = self.words_conv(encoded_chars.transpose(1, 2)).max(dim=2)
