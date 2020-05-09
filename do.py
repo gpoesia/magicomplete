@@ -199,7 +199,7 @@ def train_decoders(contextual_dataset_path,
         parameters = {
             'learning_rate': 0.0005,
             'batch_size': 128,
-            'epochs': 10,
+            'epochs': 5,
             'verbose': True,
             'context': ctx.value,
             'log_every': 100,
@@ -276,6 +276,15 @@ def run_abbreviator_experiment(
                 'minimum_validation_accuracy': 0.8 },
         ),
         LanguageAbbreviator(
+            'ctx=identifiers',
+            AutoCompleteDecoderModel.load(
+                decoders_prefix + '_ctx2.model', Context.IDENTIFIERS, ContextAlgorithm.CNN, device=device),
+            set_embedding,
+            ds['train'],
+            { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
+                'minimum_validation_accuracy': 0.8 },
+        ),
+        LanguageAbbreviator(
             'ctx=imports+identifiers',
             AutoCompleteDecoderModel.load(
                 decoders_prefix + '_ctx3.model',
@@ -297,9 +306,10 @@ def run_abbreviator_experiment(
     for ab in abbreviators:
         print('Evaluating', ab.name())
         results[ab.name()] = ab_results = evaluator.evaluate(ab, p)
-        ab_summary = ('{} - accuracy: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
+        ab_summary = ('{} - accuracy: {:.2f}%, success rate: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
                     .format(ab.name(),
                             100*ab_results['accuracy'],
+                            100*ab_results['abbreviation_success_rate'],
                             100*ab_results['eval_compression'],
                             100*ab_results['abbreviation_compression']))
         summary += ab_summary
