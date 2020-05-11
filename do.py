@@ -20,6 +20,7 @@ from abbreviation import UniformAbbreviation
 from abbreviator import *
 from slack import send_message
 from run_tracker import RunTracker
+from language_model import RNNLanguageModel
 
 def precompute_interactions(dataset, language, new_convention_every, one_convention=False):
     dataset = load_dataset(dataset)[language]['train']
@@ -154,6 +155,31 @@ def train_set_embedding(
     print('Wrote', output_path)
     print('Last loss:', loss[-1])
     print('Last accuracy:', acc[-1])
+
+def train_language_model(params_path, device, contexts_to_run):
+    print('Using device', device)
+    with open(params_path) as f:
+        params = json.load(f)
+
+    print('Loading dataset...')
+
+    with open(params['dataset']) as f:
+        dataset = json.load(f)
+
+    contexts_to_run = contexts_to_run.split(',')
+
+    for i, ctx_value in enumerate(contexts_to_run):
+        params['model']['context'] = ctx_value
+        lm = RNNLanguageModel(params['model'], device)
+
+        print('{}/{} Training with context = {}'.format(
+              i+1, len(contexts_to_run), ctx_value))
+
+        tracker = RunTracker(lm, params)
+        tracker.start()
+
+        lm.fit(dataset, tracker, params)
+        tracker.close()
 
 def train_decoders(params_path,
                    device,
@@ -324,6 +350,9 @@ if __name__ == '__main__':
     parser.add_argument('--train-abbreviator',
                         help='Run LanguageAbbreviator experiment.',
                         action='store_const', const=True, default=False)
+    parser.add_argument('--train-lm',
+                        help='Train Language Model.',
+                        action='store_const', const=True, default=False)
     parser.add_argument('--oneshot-eval-examples', type=int, default=100, help='How many positive/negative examples to fetch for each convention in the one-shot dataset')
     parser.add_argument('--abbreviations', type=int, default=1000, help='How many abbreviations scenarios to put in the one-shot dataset/use in abbreviator.')
     parser.add_argument('--one-convention', help='Limit to applying at most one convention per input.',
@@ -365,6 +394,12 @@ if __name__ == '__main__':
                 args.epochs)
     elif args.train_decoders:
         train_decoders(
+                args.params,
+                torch.device(args.device),
+                args.contexts,
+        )
+    elif args.train_lm:
+        train_language_model(
                 args.params,
                 torch.device(args.device),
                 args.contexts,

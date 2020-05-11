@@ -195,8 +195,11 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
         idxs = self.encode_indices(s)
         return self.ascii_embedding(idxs)
 
+    def embed(self, indices):
+        return self.ascii_embedding(indices)
+
     def encode_indices(self, s):
-        
+
         b = s.encode('ascii')
         return torch.tensor([self.START_INDEX] +
                              list(b) +
@@ -259,8 +262,7 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
         Returns a tensor of dimension [batch, embedding_size]
         """
         return self.ascii_embedding(batch)
-    
+
     def is_optimizeable(self):
         'Returns whether this encoder should be optimized in end-to-end training.'
         return True
-    

@@ -45,7 +45,7 @@ def train(encoder,
     loss_convergence_window = parameters.get('loss_convergence_window') or None
     loss_convergence_improvement = parameters.get('loss_convergence_improvement') or None
 
-    training_set, validation_set = dataset['train'][:1000], dataset['dev'][:max_validation_examples]
+    training_set, validation_set = dataset['train'], dataset['dev'][:max_validation_examples]
 
     log = print if verbose else lambda *args: None
     decoder.to(device)
@@ -91,6 +91,7 @@ def train(encoder,
                 tracker.add_scalar('val/accuracy',
                                    compute_accuracy(encoder, decoder, set_embedding,
                                                     validation_set, batch_size))
+                tracker.checkpoint()
 
         if loss_convergence_improvement is not None and \
            tracker.loss_converged('train/loss',
