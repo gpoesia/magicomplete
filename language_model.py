@@ -46,6 +46,8 @@ class RNNLanguageModel(nn.Module):
         self.output = nn.Linear(hidden_size + context_input_size, self.alphabet.alphabet_size())
         self.context = context
 
+        self.to(device)
+
     def encode(self, batch_l, batch_i, batch_c):
         C_idx = self.alphabet.encode_batch_indices(batch_l)
 
@@ -121,34 +123,41 @@ class RNNLanguageModel(nn.Module):
             for i, batch in enumerate(batched(training_set, batch_size)):
                 optimizer.zero_grad()
                 log_ppl = self.compute_log_perplexity(batch).mean()
-                loss = -log_ppl
-                loss.backward()
+                log_ppl.backward()
                 optimizer.step()
 
+                ppl = log_ppl.exp().item()
+
                 if p.tick() % log_every == 0:
-                    print('Epoch {} batch {}: ppl = {:.3f}, {}'.format(e, i, (-log_ppl).exp().item(), p.format()))
+                    print('Epoch {} batch {}: ppl = {:.3f}, {}'.format(e, i, ppl, p.format()))
 
                 tracker.step()
-                tracker.add_scalar('train/ppl', (-log_ppl).exp().item())
+                tracker.add_scalar('train/ppl', ppl)
 
                 if (i + 1) % validate_every == 0:
-                    tracker.add_scalar('val/ppl',
-                                       (-self.compute_log_perplexity(validation_set, batch_size).mean()).exp())
+                    tracker.add_scalar(
+                            'val/ppl',
+                            self.compute_log_perplexity(validation_set, batch_size, False)
+                                .mean().exp().item())
                     tracker.checkpoint()
 
-        tracker.add_scalar('val/ppl', self.compute_perplexity(validation_set, batch_size))
+        tracker.add_scalar(
+                'val/ppl',
+                self.compute_log_perplexity(validation_set, batch_size, False)
+                    .mean().exp().item())
 
-    def compute_log_perplexity(self, dataset, batch_size=None):
+    def compute_log_perplexity(self, dataset, batch_size=None, grad=True):
         log_ppls = []
 
-        for batch in batched(dataset, batch_size or len(dataset)):
-            batch_l, batch_c, batch_i = split(batch)
-            idx, ctx = self.encode(batch_l, batch_i, batch_c)
-            lengths = torch.tensor([len(i) + 1 for i in batch_l], device=self.device)
-
-            log_probs = self(idx, ctx)
-            log_probs.masked_fill_(idx[:, 1:] == self.alphabet.padding_token_index(), 0)
-            log_ppl = log_probs.sum(dim=1) / lengths
-            log_ppls.append(log_ppl)
-
-        return torch.cat(log_ppls)
+        with torch.autograd.set_grad_enabled(grad):
+            for batch in batched(dataset, batch_size or len(dataset)):
+                batch_l, batch_c, batch_i = split(batch)
+                idx, ctx = self.encode(batch_l, batch_i, batch_c)
+                lengths = torch.tensor([len(i) + 1 for i in batch_l], device=self.device)
+    
+                log_probs = self(idx, ctx)
+                log_probs.masked_fill_(idx[:, 1:] == self.alphabet.padding_token_index(), 0)
+                log_ppl = log_probs.sum(dim=1) / lengths
+                log_ppls.append(log_ppl)
+    
+            return -torch.cat(log_ppls)

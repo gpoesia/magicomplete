@@ -177,7 +177,6 @@ def train_language_model(params_path, device, contexts_to_run):
 
         tracker = RunTracker(lm, params)
         tracker.start()
-
         lm.fit(dataset, tracker, params)
         tracker.close()
 
