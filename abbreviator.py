@@ -251,23 +251,27 @@ class LMRLanguageAbbreviator:
 
     def find_abbreviation(self, string):
         string_tokens = split_at_identifier_boundaries(string)
-        examples = list(s for (s, t) in zip(self.training_set, self.training_set_tokens)
-                        if self.find_tokens(s['l'], string_tokens) != -1)
+
+        examples = []
+
+        for s, t in zip(self.training_set, self.training_set_tokens):
+            if self.find_tokens(s['l'], string_tokens) != -1:
+                examples.append(s)
+            if len(examples) == self.val_examples:
+                break
 
         if len(examples) < self.val_examples:
             return string
 
-        val = examples[:self.val_examples]
-
         for abbreviation in self.list_candidate_abbreviations(string):
             abbreviation_tokens = split_at_identifier_boundaries(abbreviation)
-            accuracy = self.evaluate_new_abbreviation(string_tokens, abbreviation_tokens, val)
+            accuracy = self.evaluate_new_abbreviation(string_tokens, abbreviation_tokens, examples)
 
             if accuracy >= self.minimum_validation_accuracy:
                 self.abbreviation_table[string_tokens] = abbreviation_tokens
                 self.inverted_abbreviations[abbreviation_tokens[0]].append(
                     (abbreviation_tokens, string_tokens))
-                self.evaluation_examples.extend(val)
+                self.evaluation_examples.extend(examples)
                 return abbreviation
 
         return string
@@ -291,8 +295,9 @@ class LMRLanguageAbbreviator:
         del self.abbreviation_table[string_tokens]
         self.inverted_abbreviations[abbreviation_tokens[0]].pop()
 
-        print('Accuracy with abbreviation = {} on {} examples: {:.2f}% val, {:.2f}% positive'
+        print('Accuracy with abbreviation {} => {} on {} examples: {:.2f}% val, {:.2f}% positive'
               .format(
+                  ''.join(string_tokens),
                   ''.join(abbreviation_tokens),
                   len(examples),
                   100*accuracy_val,

@@ -255,7 +255,7 @@ def build_abbreviation_targets(n_abbreviations, dataset):
     for c, _, _ in candidates:
         seen_before = False
         for current in targets:
-            if current.find(c) != -1:
+            if current.find(c) != -1 or c.find(current) != -1:
                 seen_before = True
                 break
         if seen_before:
