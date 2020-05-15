@@ -4,6 +4,7 @@ import collections
 import math
 import random
 from data import load_dataset
+from util import replace_identifier
 
 class User:
     def __init__(self, convention_compression=0.5, conventions_queue=None):
@@ -13,9 +14,14 @@ class User:
         self.substring_count = collections.defaultdict(int)
         self.convention_compression = convention_compression
 
-    def encode(self, s, trace_conventions=False, one_convention=False):
+    def encode(self, s, trace_conventions=False,
+               one_convention=False, only_identifiers=True):
         if trace_conventions:
             conventions_used = []
+
+        replace = lambda s, k, v: (s.replace(k, v)
+                                   if not only_identifiers
+                                   else replace_identifier(s, k, v))
 
         for k, v in self.conventions.items():
             s_before = s

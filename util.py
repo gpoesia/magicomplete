@@ -91,3 +91,40 @@ def trim_str_to_id(s):
 def random_hex_string(k=5):
     CHARS = '0123456789abcdef'
     return ''.join(random.choices(CHARS, k=k))
+
+def replace_identifier(s, id, val, last_was_id=False):
+    '''Replaces occurrences of `id` in string `s` by `val` only where `id` is surrounded by
+    non-identifier characters.
+
+    For example, for s = 'l(collision)', id = 'l', val = 'len', the result will be 'len(collision)',
+    since the l's inside collision are not replaced.
+    '''
+
+    tokens = split_at_identifier_boundaries(s)
+    for i in range(len(tokens)):
+        if tokens[i] == id:
+            tokens[i] = val
+
+    return ''.join(tokens)
+
+def split_at_identifier_boundaries(s):
+    '''Returns a list of strings obtained by splitting s at identifier boundaries.
+
+    Example: split_at_identifier_boundaries('self.x0 += 2') == ('self', '.', 'x0', ' += 2')
+    '''
+
+    tokens = []
+    is_in_id = False
+
+    for c in s:
+        if c.isidentifier() or (is_in_id and c.isdigit()):
+            if not is_in_id:
+                tokens.append('')
+                is_in_id = True
+        else:
+            if is_in_id or len(tokens) == 0:
+                tokens.append('')
+                is_in_id = False
+        tokens[-1] += c
+
+    return tuple(tokens)

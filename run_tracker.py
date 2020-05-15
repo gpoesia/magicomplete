@@ -37,6 +37,11 @@ class RunTracker:
             self.data[tag] = []
         self.data[tag].append(item)
 
+    def extend_list(self, tag, items):
+        if tag not in self.data:
+            self.data[tag] = []
+        self.data[tag].extend(items)
+
     def add_scalar(self, tag, value):
         self.writer.add_scalar(tag, value, self.current_step)
         self.add_to_list(tag, {'step': self.current_step, 'value': value})
@@ -72,8 +77,9 @@ class RunTracker:
             self.timer = None
 
         self.data['tracker:end-time'] = datetime.datetime.now().isoformat()
-        self.model.dump('models/{}.model'.format(self.run_id))
         self.flush()
         self.writer.close()
+
+        self.model.dump('models/{}.model'.format(self.run_id))
 
         print('Finished run', self.run_id)

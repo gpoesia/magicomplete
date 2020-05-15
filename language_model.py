@@ -91,6 +91,14 @@ class RNNLanguageModel(nn.Module):
     def dump(self, path):
         torch.save(self.state_dict(), path)
 
+    @staticmethod
+    def load(params, path, device):
+        lm = RNNLanguageModel(params, device)
+        lm.load_state_dict(torch.load(path, map_location=device))
+        lm.to(device)
+        lm.eval()
+        return lm
+
     def fit(self, dataset, tracker, params):
         learning_rate = params.get('learning_rate') or 1e-2
         batch_size = params.get('batch_size') or 32
@@ -154,10 +162,10 @@ class RNNLanguageModel(nn.Module):
                 batch_l, batch_c, batch_i = split(batch)
                 idx, ctx = self.encode(batch_l, batch_i, batch_c)
                 lengths = torch.tensor([len(i) + 1 for i in batch_l], device=self.device)
-    
+
                 log_probs = self(idx, ctx)
                 log_probs.masked_fill_(idx[:, 1:] == self.alphabet.padding_token_index(), 0)
                 log_ppl = log_probs.sum(dim=1) / lengths
                 log_ppls.append(log_ppl)
-    
+
             return -torch.cat(log_ppls)

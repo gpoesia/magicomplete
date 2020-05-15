@@ -38,3 +38,10 @@ def load_model(model, is_baseline=True, load_best=False, device=None):
         loss_history = j["losses"]
 
     return (encoder, decoder, alphabet, lang_name, loss_history)
+
+def load_from_run(class_, run_id, device=torch.device('cpu'), model_key='model'):
+    with open('runs/{}.json'.format(run_id)) as f:
+        run = json.load(f)
+    return class_.load(run['params'][model_key],
+                       'models/{}.model'.format(run_id),
+                       device)

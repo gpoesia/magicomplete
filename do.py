@@ -21,6 +21,7 @@ from abbreviator import *
 from slack import send_message
 from run_tracker import RunTracker
 from language_model import RNNLanguageModel
+from models import load_from_run
 
 def precompute_interactions(dataset, language, new_convention_every, one_convention=False):
     dataset = load_dataset(dataset)[language]['train']
@@ -180,6 +181,30 @@ def train_language_model(params_path, device, contexts_to_run):
         lm.fit(dataset, tracker, params)
         tracker.close()
 
+def find_common_identifiers(dataset, min_length=2, max_length=50):
+    frequencies = collections.Counter()
+
+    for s in dataset:
+        tokens = split_tokens(s['l'])
+
+        for i, t in enumerate(tokens):
+            if i % 2 == 1:
+                current_id = []
+                for j in range(i, len(tokens)):
+                    if j % 2 == 0:
+                        if tokens[j] != '.':
+                            break
+
+                    current_id.append(tokens[j])
+                    if j % 2 == 1:
+                        frequencies[''.join(current_id)] += 1
+
+    ranked = [(id, f, len(id)*f) for id, f in frequencies.most_common()
+              if min_length <= len(id) <= max_length]
+    ranked.sort(key=lambda r: r[2], reverse=True)
+
+    return ranked
+
 def train_decoders(params_path,
                    device,
                    contexts_to_run):
@@ -240,95 +265,57 @@ def build_abbreviation_targets(n_abbreviations, dataset):
             break
     return targets
 
-def run_abbreviator_experiment(
-        dataset_path,
-        set_embedding_path,
-        n_targets,
-        device,
-        decoders_prefix,
-        contexts):
-    print('Loading dataset {}...'.format(dataset_path))
-    with open(dataset_path) as f:
+def run_abbreviator_experiment(params_path, device):
+    with open(params_path) as f:
+        params = json.load(f)
+
+    print('Loading dataset {}...'.format(params['dataset']))
+
+    with open(params['dataset']) as f:
         ds = json.load(f)
 
     print(len(ds['dev']), 'examples in the validation set.')
 
-    targets = build_abbreviation_targets(n_targets, ds['train'])
+    targets = build_abbreviation_targets(params['n_targets'], ds['train'])
 
-    set_embedding = (SetEmbedding.load(set_embedding_path, device=device)
-                     if set_embedding_path is not None
-                     else None)
+    if params.get('set_embedding'):
+        set_embedding = SetEmbedding.load(params['set_embedding'], device=device)
 
     results = {}
     evaluator = AbbreviatorEvaluator(targets, ds['dev'])
-    summary = ''
 
-    abbreviators = [
-        LanguageAbbreviator(
-            'ctx=nil',
-            AutoCompleteDecoderModel.load(
-                decoders_prefix + '_ctx0.model', Context.NONE, ContextAlgorithm.CNN, device=device),
+    if params['abbreviator']['type'] == 'LMR':
+        lm = load_from_run(RNNLanguageModel, params['abbreviator']['lm'], device)
+        abbreviator = LMRLanguageAbbreviator(lm, ds['train'], params['abbreviator'])
+    elif params['abbreviator']['type'] == 'Neural':
+        decoder = AutoCompleteDecoderModel.load(
+            params['abbreviator']['decoder']['path'],
+            Context.parse(params['abbreviator']['decoder']['context']),
+            ContextAlgorithm.parse(params['abbreviator']['decoder']['context_algorithm']),
+            device=device)
+
+        abbreviator = LanguageAbbreviator(
+            params['abbreviator']['description'],
             set_embedding,
+            params['abbreviator'],
             ds['train'],
-            { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
-                'minimum_validation_accuracy': 0.8 },
-        ),
-        LanguageAbbreviator(
-            'ctx=imports',
-            AutoCompleteDecoderModel.load(
-                decoders_prefix + '_ctx1.model', Context.IMPORTS, ContextAlgorithm.CNN, device=device),
-            set_embedding,
-            ds['train'],
-            { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
-                'minimum_validation_accuracy': 0.8 },
-        ),
-        LanguageAbbreviator(
-            'ctx=identifiers',
-            AutoCompleteDecoderModel.load(
-                decoders_prefix + '_ctx2.model', Context.IDENTIFIERS, ContextAlgorithm.CNN, device=device),
-            set_embedding,
-            ds['train'],
-            { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
-                'minimum_validation_accuracy': 0.8 },
-        ),
-        LanguageAbbreviator(
-            'ctx=imports+identifiers',
-            AutoCompleteDecoderModel.load(
-                decoders_prefix + '_ctx3.model',
-                Context.IMPORTS | Context.IDENTIFIERS,
-                ContextAlgorithm.CNN,
-                device=device),
-            set_embedding,
-            ds['train'],
-            { 'learning_rate': 0.1, 'rehearsal_batch_size': 64,
-                'minimum_validation_accuracy': 0.8 },
-        ),
-    ]
+        )
+    else:
+        raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
 
-    contexts = list(map(int, contexts.split(','))) or list(range(4))
-    abbreviators = [a for a in abbreviators if a.decoder.context.value in contexts]
+    p = Progress(len(targets), print_every=1)
+    tracker = RunTracker(abbreviator, params)
+    tracker.extend_list('abbreviation_targets', targets)
+    tracker.start()
+    print('Evaluating', abbreviator.name())
+    results = evaluator.evaluate(abbreviator, p, tracker)
+    tracker.close()
 
-    p = Progress(len(abbreviators) * len(targets), print_every=5)
-
-    for ab in abbreviators:
-        print('Evaluating', ab.name())
-        results[ab.name()] = ab_results = evaluator.evaluate(ab, p)
-        ab_summary = ('{} - accuracy: {:.2f}%, success rate: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
-                    .format(ab.name(),
-                            100*ab_results['accuracy'],
-                            100*ab_results['abbreviation_success_rate'],
-                            100*ab_results['eval_compression'],
-                            100*ab_results['abbreviation_compression']))
-        summary += ab_summary
-        print(summary)
-
-    path = 'results/abbreviator_experiment_{}.json'.format(datetime.datetime.now().isoformat())
-
-    with open(path, 'w') as f:
-        json.dump(results, f)
-
-    print('Language Abbreviator ({} abbreviations) experiment finished. Results saved to {}. Summary: \n{}'
-                 .format(len(targets), path, summary))
+    print('Accuracy: {:.2f}%, Success rate: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
+          .format(100*results['accuracy'],
+                  100*results['abbreviation_success_rate'],
+                  100*results['eval_compression'],
+                  100*results['abbreviation_compression']))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
@@ -405,10 +392,6 @@ if __name__ == '__main__':
         )
     elif args.train_abbreviator:
         run_abbreviator_experiment(
-                args.dataset,
-                args.set_embedding,
-                args.abbreviations,
+                args.params,
                 torch.device(args.device),
-                args.decoders,
-                args.contexts,
         )
