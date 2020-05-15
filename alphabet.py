@@ -95,11 +95,12 @@ class AsciiOneHotEncoding(AlphabetEncoding):
         t[-1] = self.END
         return t
 
-    def encode_indices(self, s):
+    def encode_indices(self, s, partial=False):
         b = s.encode('ascii')
         return torch.tensor([self.START_INDEX] +
                              list(b) +
-                            [self.END_INDEX], dtype=torch.long, device=self.device)
+                            ([] if partial else [self.END_INDEX]),
+                            dtype=torch.long, device=self.device)
 
     def decode(self, t):
         return ''.join(map(chr, torch.argmax(t, dim=1)))
@@ -137,7 +138,7 @@ class AsciiOneHotEncoding(AlphabetEncoding):
                 [torch.cat([self.encode(s), self.PADDING.repeat(max_length - len(s), 1)])
                  for s in batch])
 
-    def encode_batch_indices(self, batch):
+    def encode_batch_indices(self, batch, partial=False):
         if len(batch) == 0:
             return torch.zeros((0, 0), device=self.device)
 
@@ -145,7 +146,7 @@ class AsciiOneHotEncoding(AlphabetEncoding):
         padding_tensor = torch.tensor([self.PADDING_INDEX],
                                       dtype=torch.long, device=self.device)
         return torch.stack(
-                [torch.cat([self.encode_indices(s),
+                [torch.cat([self.encode_indices(s, partial),
                             padding_tensor.repeat(max_length - len(s))])
                  for s in batch])
 
@@ -198,12 +199,13 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
     def embed(self, indices):
         return self.ascii_embedding(indices)
 
-    def encode_indices(self, s):
+    def encode_indices(self, s, partial=False):
 
         b = s.encode('ascii')
         return torch.tensor([self.START_INDEX] +
                              list(b) +
-                            [self.END_INDEX], dtype=torch.long, device=self.device)
+                            ([] if partial else [self.END_INDEX]),
+                            dtype=torch.long, device=self.device)
 
     def decode(self, t):
         raise NotImplemented()
@@ -235,7 +237,7 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
 
         return self.encode_tensor_indices(self.encode_batch_indices(batch))
 
-    def encode_batch_indices(self, batch):
+    def encode_batch_indices(self, batch, partial=False):
         if len(batch) == 0:
             return torch.zeros((0, 0), device=self.device)
 
@@ -243,7 +245,7 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
         padding_tensor = torch.tensor([self.PADDING_INDEX],
                                       dtype=torch.long, device=self.device)
         return torch.stack(
-                [torch.cat([self.encode_indices(s),
+                [torch.cat([self.encode_indices(s, partial),
                             padding_tensor.repeat(max_length - len(s))])
                  for s in batch])
 

@@ -176,13 +176,14 @@ class LMRLanguageAbbreviator:
         self.val_examples = parameters.get('val_examples') or 64
         self.rehearsal_examples = parameters.get('rehearsal_examples') or 64
         self.batch_size = parameters.get('batch_size') or 128
+        self.beam_size = parameters.get('beam_size') or 32
         self.evaluation_examples = []
 
     def encode_tokens(self, tokens):
         for i in range(len(tokens)):
             for k, v in self.abbreviation_table.items():
                 if i + len(k) <= len(tokens) and tokens[i:i + len(k)] == k:
-                    return tokens[:i] + v + self.encode_tokens(tokens[i + len(k):])
+                    return tokens[:i] + (v,) + self.encode_tokens(tokens[i + len(k):])
         return tokens
 
     def encode(self, batch):
@@ -200,36 +201,44 @@ class LMRLanguageAbbreviator:
         for c in self.list_candidates(tokens[1:]):
             answer.append((tokens[0],) + c)
 
-        for k, v in self.inverted_abbreviations.get(tokens[0], []):
-            if tokens[:len(k)] == k:
-                for c in self.list_candidates(tokens[len(k):]):
-                    answer.append(v + c)
+        for v in self.inverted_abbreviations.get(tokens[0], []):
+            for c in self.list_candidates(tokens[1:]):
+                answer.append(v + c)
 
         return answer
 
+    def beam_search(self, line, imports, identifiers):
+        i = 0
+        tokens = split_at_identifier_boundaries(line)
+        candidates = [()]
+
+        for i, t in enumerate(tokens):
+            next_candidates = []
+
+            for c in candidates:
+                for expansion in ([(t,)] + self.inverted_abbreviations.get(t, [])):
+                    next_candidates.append(c + expansion)
+
+            # Rank candidates either in the last iteration or if there are too many.
+            if len(next_candidates) > 1 and \
+               (i == len(tokens) - 1 or len(next_candidates) > self.beam_size):
+
+                perplexities = self.lm.compute_log_perplexity(
+                    [{ 'l': ''.join(c), 'i': imports, 'c': identifiers } for c in next_candidates],
+                    self.batch_size,
+                    grad=False,
+                    partial=True)
+
+                ppl_by_candidate = list(zip(perplexities, next_candidates))
+                ppl_by_candidate.sort()
+                next_candidates = [c for _, c in ppl_by_candidate][:self.beam_size]
+
+            candidates = next_candidates
+
+        return [''.join(c) for c in candidates]
+
     def decode(self, batch_encoded, idx_ctx=None):
-        all_candidates, limits = [], [0]
-
-        for row in batch_encoded:
-            l = row['l']
-            tokens = tuple(split_at_identifier_boundaries(l))
-            candidates = [''.join(c) for c in self.list_candidates(tokens)]
-            all_candidates.extend({'l': cand, 'i': row['i'], 'c': row['c']} for cand in candidates)
-            limits.append(len(all_candidates))
-
-        perplexities = self.lm.compute_log_perplexity(all_candidates, self.batch_size, False)
-
-        decoded = []
-
-        for i in range(len(batch_encoded)):
-            min_idx = min(range(limits[i], limits[i+1]),
-                          key=lambda c: perplexities[c])
-            decoded.append(all_candidates[min_idx]['l'])
-
-        return decoded
-
-    def compute_accuracy(self, examples):
-        encoded = self.encode(examples)
+        return [self.beam_search(row['l'], row['i'], row['c'])[0] for row in batch_encoded]
 
     def name(self):
         return ('LMRLanguageAbbreviator({}, min_val_acc={:.2f}, rehearsal_examples={})'
@@ -247,7 +256,7 @@ class LMRLanguageAbbreviator:
         return -1
 
     def list_candidate_abbreviations(self, s):
-        return [s[:l] for l in range(1, len(s) + 1) if s[l-1].isidentifier()]
+        return [s[:l] for l in range(1, len(s)) if s[:l].isidentifier()]
 
     def find_abbreviation(self, string):
         string_tokens = split_at_identifier_boundaries(string)
@@ -264,23 +273,21 @@ class LMRLanguageAbbreviator:
             return string
 
         for abbreviation in self.list_candidate_abbreviations(string):
-            abbreviation_tokens = split_at_identifier_boundaries(abbreviation)
-            accuracy = self.evaluate_new_abbreviation(string_tokens, abbreviation_tokens, examples)
+            accuracy = self.evaluate_new_abbreviation(string_tokens, abbreviation, examples)
 
             if accuracy >= self.minimum_validation_accuracy:
-                self.abbreviation_table[string_tokens] = abbreviation_tokens
-                self.inverted_abbreviations[abbreviation_tokens[0]].append(
-                    (abbreviation_tokens, string_tokens))
+                self.abbreviation_table[string_tokens] = abbreviation
+                self.inverted_abbreviations[abbreviation].append(string_tokens)
                 self.evaluation_examples.extend(examples)
                 return abbreviation
 
         return string
 
-    def evaluate_new_abbreviation(self, string_tokens, abbreviation_tokens, val_set):
+    def evaluate_new_abbreviation(self, string_tokens, abbreviation, val_set):
         examples = self.evaluation_examples + val_set
 
-        self.abbreviation_table[string_tokens] = abbreviation_tokens
-        self.inverted_abbreviations[abbreviation_tokens[0]].append((abbreviation_tokens, string_tokens))
+        self.abbreviation_table[string_tokens] = abbreviation
+        self.inverted_abbreviations[abbreviation].append(string_tokens)
 
         encoded_examples, _ = self.encode(examples)
         decoded_examples = self.decode(encoded_examples)
@@ -293,12 +300,12 @@ class LMRLanguageAbbreviator:
         accuracy_new = np.mean(correct_new)
 
         del self.abbreviation_table[string_tokens]
-        self.inverted_abbreviations[abbreviation_tokens[0]].pop()
+        self.inverted_abbreviations[abbreviation].pop()
 
         print('Accuracy with abbreviation {} => {} on {} examples: {:.2f}% val, {:.2f}% positive'
               .format(
                   ''.join(string_tokens),
-                  ''.join(abbreviation_tokens),
+                  abbreviation,
                   len(examples),
                   100*accuracy_val,
                   100*accuracy_new))
@@ -337,6 +344,7 @@ class AbbreviatorEvaluator:
                 tracker.add_scalar('abbreviation_success', len(abbreviation) < len(s))
                 tracker.add_scalar('abbreviation_success_freq', successes / cases)
                 tracker.add_scalar('abbreviation_compression', 1 - (compressed_len / total_len))
+                tracker.step()
 
             if progress is not None:
                 progress.tick()

@@ -48,8 +48,8 @@ class RNNLanguageModel(nn.Module):
 
         self.to(device)
 
-    def encode(self, batch_l, batch_i, batch_c):
-        C_idx = self.alphabet.encode_batch_indices(batch_l)
+    def encode(self, batch_l, batch_i, batch_c, partial=False):
+        C_idx = self.alphabet.encode_batch_indices(batch_l, partial)
 
         if self.context:
             context_tensors = []
@@ -154,14 +154,14 @@ class RNNLanguageModel(nn.Module):
                 self.compute_log_perplexity(validation_set, batch_size, False)
                     .mean().exp().item())
 
-    def compute_log_perplexity(self, dataset, batch_size=None, grad=True):
+    def compute_log_perplexity(self, dataset, batch_size=None, grad=True, partial=False):
         log_ppls = []
 
         with torch.autograd.set_grad_enabled(grad):
             for batch in batched(dataset, batch_size or len(dataset)):
                 batch_l, batch_c, batch_i = split(batch)
-                idx, ctx = self.encode(batch_l, batch_i, batch_c)
-                lengths = torch.tensor([len(i) + 1 for i in batch_l], device=self.device)
+                idx, ctx = self.encode(batch_l, batch_i, batch_c, partial)
+                lengths = torch.tensor([len(i) + (not partial) for i in batch_l], device=self.device)
 
                 log_probs = self(idx, ctx)
                 log_probs.masked_fill_(idx[:, 1:] == self.alphabet.padding_token_index(), 0)
