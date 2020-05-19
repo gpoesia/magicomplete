@@ -1,7 +1,6 @@
 from base import AutoCompleteEncoder
 import random
 import math
-from nltk.util import ngrams
 from collections import Counter
 import pprint
 from random import randrange

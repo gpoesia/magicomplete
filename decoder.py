@@ -63,6 +63,8 @@ class AutoCompleteDecoderModel(nn.Module):
         if device:
             self.to(device)
 
+        self.params = params
+
     def forward(self,
                 compressed,
                 context = None,
@@ -267,12 +269,7 @@ class AutoCompleteDecoderModel(nn.Module):
         return top_k
 
     def clone(self):
-        c = AutoCompleteDecoderModel(self.hidden_size,
-                                     self.max_test_length,
-                                     self.dropout_rate,
-                                     self.context,
-                                     self.context_algorithm,
-                                     device=self.device)
+        c = AutoCompleteDecoderModel(self.params, self.device)
         c.load_state_dict(self.state_dict())
         return c
 
@@ -280,14 +277,11 @@ class AutoCompleteDecoderModel(nn.Module):
         torch.save(self.state_dict(), path)
 
     @staticmethod
-    def load(path, context, context_algorithm, hidden_size=512, device=None):
+    def load(path, params, device=None):
         if device is None:
             device = torch.device('cpu')
 
-        decoder = AutoCompleteDecoderModel(context=context,
-                                           hidden_size=hidden_size,
-                                           device=device,
-                                           context_algorithm=context_algorithm)
+        decoder = AutoCompleteDecoderModel(params, device)
         decoder.load_state_dict(torch.load(path, map_location=device))
         decoder.to(device)
         decoder.eval()

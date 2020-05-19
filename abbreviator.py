@@ -284,7 +284,10 @@ class LMRLanguageAbbreviator:
         return string
 
     def evaluate_new_abbreviation(self, string_tokens, abbreviation, val_set):
-        examples = self.evaluation_examples + val_set
+        rehearsal = random.sample(self.evaluation_examples,
+                                  k=min(len(self.evaluation_examples),
+                                        self.rehearsal_examples))
+        examples = rehearsal + val_set
 
         self.abbreviation_table[string_tokens] = abbreviation
         self.inverted_abbreviations[abbreviation].append(string_tokens)
@@ -293,8 +296,8 @@ class LMRLanguageAbbreviator:
         decoded_examples = self.decode(encoded_examples)
 
         correct = [dec == original['l'] for dec, original in zip(decoded_examples, examples)]
-        correct_val = correct[:len(self.evaluation_examples)]
-        correct_new = correct[len(self.evaluation_examples):]
+        correct_val = correct[:len(rehearsal)]
+        correct_new = correct[len(rehearsal):]
 
         accuracy_val = np.mean(correct_val) if len(correct_val) else 1.0
         accuracy_new = np.mean(correct_new)

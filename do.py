@@ -280,6 +280,8 @@ def run_abbreviator_experiment(params_path, device):
 
     if params.get('set_embedding'):
         set_embedding = SetEmbedding.load(params['set_embedding'], device=device)
+    else:
+        set_embedding = None
 
     results = {}
     evaluator = AbbreviatorEvaluator(targets, ds['dev'])
@@ -290,15 +292,14 @@ def run_abbreviator_experiment(params_path, device):
     elif params['abbreviator']['type'] == 'Neural':
         decoder = AutoCompleteDecoderModel.load(
             params['abbreviator']['decoder']['path'],
-            Context.parse(params['abbreviator']['decoder']['context']),
-            ContextAlgorithm.parse(params['abbreviator']['decoder']['context_algorithm']),
-            device=device)
+            params['abbreviator']['decoder']['params'],
+            device)
 
         abbreviator = LanguageAbbreviator(
-            params['abbreviator']['description'],
+            decoder,
             set_embedding,
-            params['abbreviator'],
             ds['train'],
+            params['abbreviator'],
         )
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
