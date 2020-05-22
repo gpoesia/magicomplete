@@ -60,7 +60,7 @@ class LanguageAbbreviator:
     def encode(self, batch):
         batch_l, batch_i, batch_c = zip(*[(r['l'], r['i'], r['c']) for r in batch])
         ctx = self.decoder.compute_context(batch_i, batch_c, self.set_embedding)
-        return [self.user.encode(s) for s in batch_l], ctx
+        return [{ **r, 'l': self.user.encode(r['l'])} for r in batch], ctx
 
     def decode(self, batch_encoded, ctx):
         batch_l = [r['l'] for r in batch_encoded]
@@ -158,6 +158,9 @@ class LanguageAbbreviator:
                 return True
 
         return False
+
+    def dump(self, path):
+        self.decoder.dump(path)
 
 class LMRLanguageAbbreviator:
     def __init__(self, lm, training_set, parameters={}):

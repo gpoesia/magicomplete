@@ -310,13 +310,14 @@ def run_abbreviator_experiment(params_path, device):
     tracker.start()
     print('Evaluating', abbreviator.name())
     results = evaluator.evaluate(abbreviator, p, tracker)
-    tracker.close()
 
     print('Accuracy: {:.2f}%, Success rate: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
           .format(100*results['accuracy'],
                   100*results['abbreviation_success_rate'],
                   100*results['eval_compression'],
                   100*results['abbreviation_compression']))
+
+    tracker.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
