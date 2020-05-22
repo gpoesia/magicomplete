@@ -7,6 +7,8 @@ import numpy as np
 from util import batched, split_at_identifier_boundaries
 import collections
 import json
+from models import load_from_run
+from language_model import RNNLanguageModel
 
 class AbbreviationAlgorithm:
     def generate_alternatives(self, string):
@@ -327,6 +329,23 @@ class LMRLanguageAbbreviator:
                        'abbreviation_table': { (''.join(k)): v for k, v in self.abbreviation_table.items() },
                        'inverted_abbreviations': self.inverted_abbreviations },
                       f)
+
+    @staticmethod
+    def load(params, path, device):
+        with open(path) as f:
+            tables = json.load(f)
+        lm = load_from_run(RNNLanguageModel, params['lm'], device, 'model')
+        abbreviator = LMRLanguageAbbreviator(lm, [], params)
+
+        abbreviator.abbreviation_table = {
+            k: tuple(v) for k, v in tables['abbreviation_table'].items()
+        }
+        abbreviator.inverted_abbreviations = {
+            k: [tuple(u) for u in v]
+            for k, v in tables['inverted_abbreviations'].items()
+        }
+
+        return abbreviator
 
 class AbbreviatorEvaluator:
     def __init__(self, common_strings, evaluation_set, batch_size=64):
