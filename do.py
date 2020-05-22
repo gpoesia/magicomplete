@@ -20,7 +20,7 @@ from abbreviation import UniformAbbreviation
 from abbreviator import *
 from slack import send_message
 from run_tracker import RunTracker
-from language_model import RNNLanguageModel
+from language_model import RNNLanguageModel, DiscriminativeLanguageModel
 from models import load_from_run
 
 def precompute_interactions(dataset, language, new_convention_every, one_convention=False):
@@ -179,6 +179,70 @@ def train_language_model(params_path, device, contexts_to_run):
         tracker = RunTracker(lm, params)
         tracker.start()
         lm.fit(dataset, tracker, params)
+        tracker.close()
+
+def build_discriminative_lm_examples(examples, targets):
+    X, y = [], []
+
+    expansion_table = collections.defaultdict(list)
+
+    for t in targets:
+        expansion_table[t[0]].append(t)
+
+    t_set = set(targets)
+
+    for i, r in enumerate(examples):
+        X.append(r)
+        y.append(1)
+
+        tokens = split_at_identifier_boundaries(r['l'])
+        negative_example_tokens = []
+
+        for t in tokens:
+            if t in t_set or t in expansion_table:
+                negative_example_tokens.append(random.choice(expansion_table[t[0]]))
+            else:
+                negative_example_tokens.append(t)
+
+        negative_example = ''.join(negative_example_tokens)
+
+        if negative_example != r['l']:
+            X.append({**r, 'l': negative_example })
+            y.append(0)
+
+    return list(zip(X, y))
+
+def train_discriminative_language_model(params_path, device, contexts_to_run):
+    print('Using device', device)
+    with open(params_path) as f:
+        params = json.load(f)
+
+    print('Loading dataset...')
+    with open(params['dataset']) as f:
+        dataset = json.load(f)
+
+    print('Finding abbreviation targets...')
+    targets = build_abbreviation_targets(params['n_targets'], dataset['train'])
+
+    contexts_to_run = contexts_to_run.split(',')
+
+    p_len = params['max_prefix_len']
+
+    ds = {
+        'train': build_discriminative_lm_examples(dataset['train'], targets),
+        'dev': build_discriminative_lm_examples(dataset['dev'], targets)
+    }
+
+    for i, ctx_value in enumerate(contexts_to_run):
+        params['model']['context'] = ctx_value
+        lm = DiscriminativeLanguageModel(params['model'], device)
+
+        print('{}/{} Training with context = {}'.format(
+              i+1, len(contexts_to_run), ctx_value))
+
+        tracker = RunTracker(lm, params)
+        tracker.start()
+        lm.fit(ds, tracker, params)
         tracker.close()
 
 def find_common_identifiers(dataset, min_length=2, max_length=50):
@@ -341,6 +405,9 @@ if __name__ == '__main__':
     parser.add_argument('--train-lm',
                         help='Train Language Model.',
                         action='store_const', const=True, default=False)
+    parser.add_argument('--train-dlm',
+                        help='Train Discriminative Language Model.',
+                        action='store_const', const=True, default=False)
     parser.add_argument('--oneshot-eval-examples', type=int, default=100, help='How many positive/negative examples to fetch for each convention in the one-shot dataset')
     parser.add_argument('--abbreviations', type=int, default=1000, help='How many abbreviations scenarios to put in the one-shot dataset/use in abbreviator.')
     parser.add_argument('--one-convention', help='Limit to applying at most one convention per input.',
@@ -388,6 +455,12 @@ if __name__ == '__main__':
         )
     elif args.train_lm:
         train_language_model(
+                args.params,
+                torch.device(args.device),
+                args.contexts,
+        )
+    elif args.train_dlm:
+        train_discriminative_language_model(
                 args.params,
                 torch.device(args.device),
                 args.contexts,
