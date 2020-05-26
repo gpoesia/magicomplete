@@ -390,8 +390,8 @@ class DiscriminativeLanguageAbbreviator:
             next_candidates = []
 
             for c in candidates:
-                for expansion in ([(t,)] + self.inverted_abbreviations.get(t, [])):
-                    next_candidates.append(c + expansion)
+                for expansion in ([t,] + self.inverted_abbreviations.get(t, [])):
+                    next_candidates.append(c + (expansion,))
 
             # Rank candidates either in the last iteration or if there are too many.
             if len(next_candidates) > 1 and \
@@ -417,14 +417,8 @@ class DiscriminativeLanguageAbbreviator:
                         self.minimum_validation_accuracy,
                         self.rehearsal_examples))
 
-    def find_tokens(self, s, tokens):
-        s_t = split_at_identifier_boundaries(s)
-
-        for i in range(len(s)):
-            if tokens == s_t[i:i+len(tokens)]:
-                return i
-
-        return -1
+    def find_token(self, s, t):
+        return t in split_at_identifier_boundaries(s)
 
     def list_candidate_abbreviations(self, s):
         return [s[:l] for l in range(1, len(s)) if s[:l].isidentifier()]
@@ -435,7 +429,7 @@ class DiscriminativeLanguageAbbreviator:
         examples = []
 
         for s, t in zip(self.training_set, self.training_set_tokens):
-            if self.find_tokens(s['l'], string_tokens) != -1:
+            if self.find_token(s['l'], string):
                 examples.append(s)
             if len(examples) == self.val_examples:
                 break
@@ -444,24 +438,24 @@ class DiscriminativeLanguageAbbreviator:
             return string
 
         for abbreviation in self.list_candidate_abbreviations(string):
-            accuracy = self.evaluate_new_abbreviation(string_tokens, abbreviation, examples)
+            accuracy = self.evaluate_new_abbreviation(string, abbreviation, examples)
 
             if accuracy >= self.minimum_validation_accuracy:
-                self.abbreviation_table[string_tokens] = abbreviation
-                self.inverted_abbreviations[abbreviation].append(string_tokens)
+                self.abbreviation_table[string] = abbreviation
+                self.inverted_abbreviations[abbreviation].append(string)
                 self.evaluation_examples.extend(examples)
                 return abbreviation
 
         return string
 
-    def evaluate_new_abbreviation(self, string_tokens, abbreviation, val_set):
+    def evaluate_new_abbreviation(self, string, abbreviation, val_set):
         rehearsal = random.sample(self.evaluation_examples,
                                   k=min(len(self.evaluation_examples),
                                         self.rehearsal_examples))
         examples = rehearsal + val_set
 
-        self.abbreviation_table[string_tokens] = abbreviation
-        self.inverted_abbreviations[abbreviation].append(string_tokens)
+        self.abbreviation_table[string] = abbreviation
+        self.inverted_abbreviations[abbreviation].append(string)
 
         encoded_examples, _ = self.encode(examples)
         decoded_examples = self.decode(encoded_examples)
@@ -473,19 +467,16 @@ class DiscriminativeLanguageAbbreviator:
         accuracy_val = np.mean(correct_val) if len(correct_val) else 1.0
         accuracy_new = np.mean(correct_new)
 
-        del self.abbreviation_table[string_tokens]
+        del self.abbreviation_table[string]
         self.inverted_abbreviations[abbreviation].pop()
 
         print('Accuracy with abbreviation {} => {} on {} examples: {:.2f}% val, {:.2f}% positive'
               .format(
-                  ''.join(string_tokens),
+                  ''.join(string),
                   abbreviation,
                   len(examples),
                   100*accuracy_val,
                   100*accuracy_new))
-
-        errors = [(dec, original['l']) for dec, original in zip(decoded_examples, examples)
-                  if dec != original['l']][:10]
 
         return min(accuracy_val, accuracy_new)
 

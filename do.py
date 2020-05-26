@@ -252,18 +252,10 @@ def find_common_identifiers(dataset, min_length=2, max_length=50):
         tokens = split_tokens(s['l'])
 
         for i, t in enumerate(tokens):
-            if i % 2 == 1:
-                current_id = []
-                for j in range(i, len(tokens)):
-                    if j % 2 == 0:
-                        if tokens[j] != '.':
-                            break
+            if t.isidentifier():
+                frequencies[t] += 1
 
-                    current_id.append(tokens[j])
-                    if j % 2 == 1:
-                        frequencies[''.join(current_id)] += 1
-
-    ranked = [(id, f, len(id)*f) for id, f in frequencies.most_common()
+    ranked = [(id, f, (len(id) - 1)*f) for id, f in frequencies.most_common()
               if min_length <= len(id) <= max_length]
     ranked.sort(key=lambda r: r[2], reverse=True)
 
@@ -365,7 +357,7 @@ def run_abbreviator_experiment(params_path, device):
             ds['train'],
             params['abbreviator'],
         )
-    elif params['abbreviator']['type'] == 'DLM':
+    elif params['abbreviator']['type'] == 'DLA':
         dlm = load_from_run(DiscriminativeLanguageModel,
                             params['abbreviator']['dlm'], device)
 
