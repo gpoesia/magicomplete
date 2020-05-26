@@ -185,11 +185,11 @@ class LMRLanguageAbbreviator:
         self.evaluation_examples = []
 
     def encode_tokens(self, tokens):
-        for i in range(len(tokens)):
-            for k, v in self.abbreviation_table.items():
-                if i + len(k) <= len(tokens) and tokens[i:i + len(k)] == k:
-                    return tokens[:i] + (v,) + self.encode_tokens(tokens[i + len(k):])
-        return tokens
+        ts = []
+        for t in tokens:
+            v = self.abbreviation_table.get(t)
+            ts.append(v or t)
+        return ts
 
     def encode(self, batch):
         encoded_l = [{ **r,
@@ -338,7 +338,7 @@ class LMRLanguageAbbreviator:
         abbreviator = LMRLanguageAbbreviator(lm, [], params)
 
         abbreviator.abbreviation_table = {
-            k: tuple(v) for k, v in tables['abbreviation_table'].items()
+            k: v for k, v in tables['abbreviation_table'].items()
         }
         abbreviator.inverted_abbreviations = {
             k: [tuple(u) for u in v]
@@ -346,6 +346,173 @@ class LMRLanguageAbbreviator:
         }
 
         return abbreviator
+
+class DiscriminativeLanguageAbbreviator:
+    def __init__(self, dlm, training_set, parameters={}):
+        self.parameters = parameters
+        self.description = parameters.get('description') or 'DLA'
+        self.dlm = dlm
+        self.training_set = training_set
+
+        self.training_set_tokens = [split_at_identifier_boundaries(r['l'])
+                                    for r in training_set]
+
+        self.abbreviation_table = {}
+        self.inverted_abbreviations = collections.defaultdict(list)
+
+        self.minimum_validation_accuracy = parameters.get('minimum_validation_accuracy') or 0.8
+        self.val_examples = parameters.get('val_examples') or 64
+        self.rehearsal_examples = parameters.get('rehearsal_examples') or 64
+        self.batch_size = parameters.get('batch_size') or 128
+        self.beam_size = parameters.get('beam_size') or 32
+        self.evaluation_examples = []
+
+    def encode_tokens(self, tokens):
+        ts = []
+        for t in tokens:
+            v = self.abbreviation_table.get(t)
+            ts.append(v or t)
+        return ts
+
+    def encode(self, batch):
+        encoded_l = [{ **r,
+                       'l': ''.join(self.encode_tokens(split_at_identifier_boundaries(r['l']))) }
+                     for r in batch]
+
+        return encoded_l, None
+
+    def beam_search(self, line, imports, identifiers):
+        i = 0
+        tokens = split_at_identifier_boundaries(line)
+        candidates = [()]
+
+        for i, t in enumerate(tokens):
+            next_candidates = []
+
+            for c in candidates:
+                for expansion in ([(t,)] + self.inverted_abbreviations.get(t, [])):
+                    next_candidates.append(c + expansion)
+
+            # Rank candidates either in the last iteration or if there are too many.
+            if len(next_candidates) > 1 and \
+               (i == len(tokens) - 1 or len(next_candidates) > self.beam_size):
+                batch = [{ 'l': ''.join(c), 'i': imports, 'c': identifiers }
+                         for c in next_candidates]
+                encoded, ctx = self.dlm.encode(batch, True)
+                scores = self.dlm(encoded, ctx)
+                score_by_candidate = list(zip(scores.tolist(), next_candidates))
+                score_by_candidate.sort(reverse=True)
+                next_candidates = [c for _, c in score_by_candidate][:self.beam_size]
+
+            candidates = next_candidates
+
+        return [''.join(c) for c in candidates]
+
+    def decode(self, batch_encoded, idx_ctx=None):
+        return [self.beam_search(row['l'], row['i'], row['c'])[0] for row in batch_encoded]
+
+    def name(self):
+        return ('DiscriminativeLanguageAbbreviator({}, min_val_acc={:.2f}, rehearsal_examples={})'
+                .format(self.description,
+                        self.minimum_validation_accuracy,
+                        self.rehearsal_examples))
+
+    def find_tokens(self, s, tokens):
+        s_t = split_at_identifier_boundaries(s)
+
+        for i in range(len(s)):
+            if tokens == s_t[i:i+len(tokens)]:
+                return i
+
+        return -1
+
+    def list_candidate_abbreviations(self, s):
+        return [s[:l] for l in range(1, len(s)) if s[:l].isidentifier()]
+
+    def find_abbreviation(self, string):
+        string_tokens = split_at_identifier_boundaries(string)
+
+        examples = []
+
+        for s, t in zip(self.training_set, self.training_set_tokens):
+            if self.find_tokens(s['l'], string_tokens) != -1:
+                examples.append(s)
+            if len(examples) == self.val_examples:
+                break
+
+        if len(examples) < self.val_examples:
+            return string
+
+        for abbreviation in self.list_candidate_abbreviations(string):
+            accuracy = self.evaluate_new_abbreviation(string_tokens, abbreviation, examples)
+
+            if accuracy >= self.minimum_validation_accuracy:
+                self.abbreviation_table[string_tokens] = abbreviation
+                self.inverted_abbreviations[abbreviation].append(string_tokens)
+                self.evaluation_examples.extend(examples)
+                return abbreviation
+
+        return string
+
+    def evaluate_new_abbreviation(self, string_tokens, abbreviation, val_set):
+        rehearsal = random.sample(self.evaluation_examples,
+                                  k=min(len(self.evaluation_examples),
+                                        self.rehearsal_examples))
+        examples = rehearsal + val_set
+
+        self.abbreviation_table[string_tokens] = abbreviation
+        self.inverted_abbreviations[abbreviation].append(string_tokens)
+
+        encoded_examples, _ = self.encode(examples)
+        decoded_examples = self.decode(encoded_examples)
+
+        correct = [dec == original['l'] for dec, original in zip(decoded_examples, examples)]
+        correct_val = correct[:len(rehearsal)]
+        correct_new = correct[len(rehearsal):]
+
+        accuracy_val = np.mean(correct_val) if len(correct_val) else 1.0
+        accuracy_new = np.mean(correct_new)
+
+        del self.abbreviation_table[string_tokens]
+        self.inverted_abbreviations[abbreviation].pop()
+
+        print('Accuracy with abbreviation {} => {} on {} examples: {:.2f}% val, {:.2f}% positive'
+              .format(
+                  ''.join(string_tokens),
+                  abbreviation,
+                  len(examples),
+                  100*accuracy_val,
+                  100*accuracy_new))
+
+        errors = [(dec, original['l']) for dec, original in zip(decoded_examples, examples)
+                  if dec != original['l']][:10]
+
+        return min(accuracy_val, accuracy_new)
+
+    def dump(self, path):
+        with open(path, 'w') as f:
+            json.dump({
+                       'abbreviation_table': { (''.join(k)): v for k, v in self.abbreviation_table.items() },
+                       'inverted_abbreviations': self.inverted_abbreviations },
+                      f)
+
+    @staticmethod
+    def load(params, path, device):
+        with open(path) as f:
+            tables = json.load(f)
+        dlm = load_from_run(DiscriminativeLanguageModel, params['dlm'], device, 'model')
+        abbreviator = DiscriminativeLanguageModel(dlm, [], params)
+
+        abbreviator.abbreviation_table = {
+            k: v for k, v in tables['abbreviation_table'].items()
+        }
+        abbreviator.inverted_abbreviations = {
+            k: [tuple(u) for u in v]
+            for k, v in tables['inverted_abbreviations'].items()
+        }
+
+        return abbreviator
+
 
 class AbbreviatorEvaluator:
     def __init__(self, common_strings, evaluation_set, batch_size=64):

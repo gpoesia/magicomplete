@@ -319,7 +319,7 @@ def build_abbreviation_targets(n_abbreviations, dataset):
     for c, _, _ in candidates:
         seen_before = False
         for current in targets:
-            if current.find(c) != -1 or c.find(current) != -1:
+            if current.startswith(c) or c.startswith(current):
                 seen_before = True
                 break
         if seen_before:
@@ -365,6 +365,16 @@ def run_abbreviator_experiment(params_path, device):
             ds['train'],
             params['abbreviator'],
         )
+    elif params['abbreviator']['type'] == 'DLM':
+        dlm = load_from_run(DiscriminativeLanguageModel,
+                            params['abbreviator']['dlm'], device)
+
+        abbreviator = DiscriminativeLanguageAbbreviator(
+            dlm,
+            ds['train'],
+            params['abbreviator'],
+        )
+
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
 
