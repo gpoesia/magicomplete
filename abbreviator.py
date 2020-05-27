@@ -365,6 +365,7 @@ class DiscriminativeLanguageAbbreviator:
         self.rehearsal_examples = parameters.get('rehearsal_examples') or 64
         self.batch_size = parameters.get('batch_size') or 128
         self.beam_size = parameters.get('beam_size') or 32
+        self.max_abbrev_len = parameters.get('max_abbrev_len') or 1
         self.evaluation_examples = []
 
     def encode_tokens(self, tokens):
@@ -421,7 +422,8 @@ class DiscriminativeLanguageAbbreviator:
         return t in split_at_identifier_boundaries(s)
 
     def list_candidate_abbreviations(self, s):
-        return [s[:l] for l in range(1, len(s)) if s[:l].isidentifier()]
+        return [s[:l] for l in range(1, min(len(s), self.max_abbrev_len + 1))
+                if s[:l].isidentifier()]
 
     def find_abbreviation(self, string):
         string_tokens = split_at_identifier_boundaries(string)
