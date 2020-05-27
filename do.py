@@ -189,26 +189,31 @@ def build_discriminative_lm_examples(examples, targets):
     for t in targets:
         expansion_table[t[0]].append(t)
 
+    # Add the initial on its own as an alternative.
+    for k, v in expansion_table.items():
+        v.append(k)
+
     t_set = set(targets)
 
     for i, r in enumerate(examples):
-        X.append(r)
-        y.append(1)
-
-        tokens = split_at_identifier_boundaries(r['l'])
+        tokens = list(split_at_identifier_boundaries(r['l']))
         negative_example_tokens = []
+        examples_i = []
 
-        for t in tokens:
+        for i, t in enumerate(tokens):
             if t in t_set or t in expansion_table:
                 negative_example_tokens.append(random.choice(expansion_table[t[0]]))
             else:
                 negative_example_tokens.append(t)
 
-        negative_example = ''.join(negative_example_tokens)
+            examples_i.append((tokens[:i + 1], True))
+            if negative_example_tokens != tokens[:i + 1]:
+                examples_i.append((negative_example_tokens[:], False))
 
-        if negative_example != r['l']:
-            X.append({**r, 'l': negative_example })
-            y.append(0)
+        for ex_x, ex_y in examples_i:
+            l = ''.join(ex_x)
+            X.append({**r, 'l': l})
+            y.append(int(ex_y))
 
     return list(zip(X, y))
 
