@@ -185,35 +185,108 @@ def build_discriminative_lm_examples(examples, targets):
     X, y = [], []
 
     expansion_table = collections.defaultdict(list)
+    example_index = collections.defaultdict(list)
 
     for t in targets:
         expansion_table[t[0]].append(t)
 
-    # Add the initial on its own as an alternative.
-    for k, v in expansion_table.items():
-        v.append(k)
-
     t_set = set(targets)
+
+    exs = []
 
     for i, r in enumerate(examples):
         tokens = list(split_at_identifier_boundaries(r['l']))
-        negative_example_tokens = []
-        examples_i = []
+        exs.append({ **r, 't': tokens })
 
-        for i, t in enumerate(tokens):
-            if t in t_set or t in expansion_table:
-                negative_example_tokens.append(random.choice(expansion_table[t[0]]))
-            else:
-                negative_example_tokens.append(t)
+        for t in set(tokens):
+            if t.isidentifier():
+                example_index[t].append(i)
 
-            examples_i.append((tokens[:i + 1], True))
-            if negative_example_tokens != tokens[:i + 1]:
-                examples_i.append((negative_example_tokens[:], False))
+    for target in targets:
+        # Positive examples
+        positive = 0
+        for i in example_index[target]:
+            e = exs[i]
+            tokens = e['t']
+            for p in range(len(tokens)):
+                y.append(1)
+                X.append({ 'l': ''.join(tokens[:i+1]), 'i': e['i'], 'c': e['c'] })
+            positive += 1
 
-        for ex_x, ex_y in examples_i:
-            l = ''.join(ex_x)
-            X.append({**r, 'l': l})
-            y.append(int(ex_y))
+        # Negative examples
+        negative_by_type = positive // 4
+
+        # 1 - Not expanded
+        for i in random.choices(example_index[target], k=negative_by_type):
+            e = exs[i]
+            tokens, new_tokens, replaced = e['t'], [], False
+
+            for t in tokens:
+                if t == target:
+                    new_tokens.append(t[0])
+                    replaced = True
+                else:
+                    new_tokens.append(t)
+
+                if replaced:
+                    y.append(0)
+                    X.append({ 'l': ''.join(new_tokens), 'i': e['i'], 'c': e['c'] })
+
+        if len(expansion_table[target[0]]) > 1:
+            # 2 - Replaced by something else
+            other_expansions = [e for e in expansion_table[target[0]] if e != target]
+
+            for i in random.choices(example_index[target], k=negative_by_type):
+                e = exs[i]
+                tokens, new_tokens, replaced = e['t'], [], False
+
+                for t in tokens:
+                    if t == target:
+                        replacements = random.choice(other_expansions)
+                        new_tokens.append(t[0])
+                        replaced = True
+                    else:
+                        new_tokens.append(t)
+
+                    if replaced:
+                        y.append(0)
+                        X.append({ 'l': ''.join(new_tokens), 'i': e['i'], 'c': e['c'] })
+
+            # 3 - Something else replaced by this target
+            other_examples = [i
+                              for t in other_expansions
+                              for i in example_index[t]]
+
+            for i in random.choices(other_examples, k=negative_by_type):
+                e = exs[i]
+                tokens, new_tokens, replaced = e['t'], [], False
+
+                for t in tokens:
+                    if t != target and t in t_set and t[0] == target[0]:
+                        new_tokens.append(target)
+                        replaced = True
+                    else:
+                        new_tokens.append(t)
+
+                    if replaced:
+                        y.append(0)
+                        X.append({ 'l': ''.join(new_tokens), 'i': e['i'], 'c': e['c'] })
+
+        #4 - Expanded an already correct one-character token.
+        for i in random.choices(example_index[target[0]], k=negative_by_type):
+            e = exs[i]
+            tokens, new_tokens, replaced = e['t'], [], False
+
+            for t in tokens:
+                if t == target[0]:
+                    new_tokens.append(target)
+                    replaced = True
+                else:
+                    new_tokens.append(t)
+
+                if replaced:
+                    y.append(0)
+                    X.append({ 'l': ''.join(new_tokens), 'i': e['i'], 'c': e['c'] })
 
     return list(zip(X, y))
 
