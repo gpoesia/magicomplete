@@ -3,12 +3,14 @@
 import random
 from user import User
 import torch
+from torch.nn import functional as F
 import numpy as np
-from util import batched, split_at_identifier_boundaries
+from util import batched, split_at_identifier_boundaries, Progress, is_subsequence
 import collections
 import json
 from models import load_from_run
-from language_model import RNNLanguageModel
+from language_model import RNNLanguageModel, DiscriminativeLanguageModel
+import math
 
 class AbbreviationAlgorithm:
     def generate_alternatives(self, string):
@@ -198,20 +200,6 @@ class LMRLanguageAbbreviator:
 
         return encoded_l, None
 
-    def list_candidates(self, tokens):
-        if len(tokens) == 0:
-            return [()]
-
-        answer = []
-        for c in self.list_candidates(tokens[1:]):
-            answer.append((tokens[0],) + c)
-
-        for v in self.inverted_abbreviations.get(tokens[0], []):
-            for c in self.list_candidates(tokens[1:]):
-                answer.append(v + c)
-
-        return answer
-
     def beam_search(self, line, imports, identifiers):
         i = 0
         tokens = split_at_identifier_boundaries(line)
@@ -348,25 +336,28 @@ class LMRLanguageAbbreviator:
         return abbreviator
 
 class DiscriminativeLanguageAbbreviator:
-    def __init__(self, dlm, training_set, parameters={}):
-        self.parameters = parameters
-        self.description = parameters.get('description') or 'DLA'
+    def __init__(self, dlm, abbreviation_targets, params={}):
+        self.params = params
         self.dlm = dlm
-        self.training_set = training_set
+        self.abbreviation_targets = abbreviation_targets
+        self._load_params()
 
-        self.training_set_tokens = [split_at_identifier_boundaries(r['l'])
-                                    for r in training_set]
+    def _load_params(self):
+        self.description = self.params.get('description') or 'DLA'
+        self.minimum_validation_accuracy = self.params.get('minimum_validation_accuracy') or 0.8
+        self.val_examples = self.params.get('val_examples') or 64
+        self.rehearsal_examples = self.params.get('rehearsal_examples') or 64
+        self.batch_size = self.params.get('batch_size') or 128
+        self.beam_size = self.params.get('beam_size') or 32
+        self.max_abbrev_len = self.params.get('max_abbrev_len') or 1
+        self.lambd = self.params.get('lambd') or 0.5
 
-        self.abbreviation_table = {}
-        self.inverted_abbreviations = collections.defaultdict(list)
-
-        self.minimum_validation_accuracy = parameters.get('minimum_validation_accuracy') or 0.8
-        self.val_examples = parameters.get('val_examples') or 64
-        self.rehearsal_examples = parameters.get('rehearsal_examples') or 64
-        self.batch_size = parameters.get('batch_size') or 128
-        self.beam_size = parameters.get('beam_size') or 32
-        self.max_abbrev_len = parameters.get('max_abbrev_len') or 1
-        self.evaluation_examples = []
+    def list_candidate_expansions(self, token):
+        candidates = [token]
+        for t in self.abbreviation_targets:
+            if t != token and is_subsequence(token, t):
+                candidates.append(t)
+        return candidates
 
     def encode_tokens(self, tokens):
         ts = []
@@ -382,7 +373,9 @@ class DiscriminativeLanguageAbbreviator:
 
         return encoded_l, None
 
-    def beam_search(self, line, imports, identifiers):
+    def beam_search(self, line, imports, identifiers, beam_size=None):
+        beam_size = beam_size or self.beam_size
+
         i = 0
         tokens = split_at_identifier_boundaries(line)
         candidates = [()]
@@ -391,7 +384,7 @@ class DiscriminativeLanguageAbbreviator:
             next_candidates = []
 
             for c in candidates:
-                for expansion in ([t,] + self.inverted_abbreviations.get(t, [])):
+                for expansion in self.list_candidate_expansions(t):
                     next_candidates.append(c + (expansion,))
 
             # Rank candidates either in the last iteration or if there are too many.
@@ -425,87 +418,101 @@ class DiscriminativeLanguageAbbreviator:
         return [s[:l] for l in range(1, min(len(s), self.max_abbrev_len + 1))
                 if s[:l].isidentifier()]
 
-    def find_abbreviation(self, string):
-        string_tokens = split_at_identifier_boundaries(string)
-
-        examples = []
-
-        for s, t in zip(self.training_set, self.training_set_tokens):
-            if self.find_token(s['l'], string):
-                examples.append(s)
-            if len(examples) == self.val_examples:
-                break
-
-        if len(examples) < self.val_examples:
-            return string
-
-        for abbreviation in self.list_candidate_abbreviations(string):
-            accuracy = self.evaluate_new_abbreviation(string, abbreviation, examples)
-
-            if accuracy >= self.minimum_validation_accuracy:
-                self.abbreviation_table[string] = abbreviation
-                self.inverted_abbreviations[abbreviation].append(string)
-                self.evaluation_examples.extend(examples)
-                return abbreviation
-
-        return string
-
-    def evaluate_new_abbreviation(self, string, abbreviation, val_set):
-        rehearsal = random.sample(self.evaluation_examples,
-                                  k=min(len(self.evaluation_examples),
-                                        self.rehearsal_examples))
-        examples = rehearsal + val_set
-
-        self.abbreviation_table[string] = abbreviation
-        self.inverted_abbreviations[abbreviation].append(string)
-
-        encoded_examples, _ = self.encode(examples)
-        decoded_examples = self.decode(encoded_examples)
-
-        correct = [dec == original['l'] for dec, original in zip(decoded_examples, examples)]
-        correct_val = correct[:len(rehearsal)]
-        correct_new = correct[len(rehearsal):]
-
-        accuracy_val = np.mean(correct_val) if len(correct_val) else 1.0
-        accuracy_new = np.mean(correct_new)
-
-        del self.abbreviation_table[string]
-        self.inverted_abbreviations[abbreviation].pop()
-
-        print('Accuracy with abbreviation {} => {} on {} examples: {:.2f}% val, {:.2f}% positive'
-              .format(
-                  ''.join(string),
-                  abbreviation,
-                  len(examples),
-                  100*accuracy_val,
-                  100*accuracy_new))
-
-        return min(accuracy_val, accuracy_new)
-
     def dump(self, path):
-        with open(path, 'w') as f:
-            json.dump({
-                       'abbreviation_table': { (''.join(k)): v for k, v in self.abbreviation_table.items() },
-                       'inverted_abbreviations': self.inverted_abbreviations },
-                      f)
+        torch.save({
+            'params': self.params,
+            'abbreviation_targets': self.abbreviation_targets,
+            'dlm': self.dlm.state_dict(),
+            }, path)
 
     @staticmethod
     def load(params, path, device):
-        with open(path) as f:
-            tables = json.load(f)
-        dlm = load_from_run(DiscriminativeLanguageModel, params['dlm'], device, 'model')
-        abbreviator = DiscriminativeLanguageModel(dlm, [], params)
+        raise NotImplemented()
 
-        abbreviator.abbreviation_table = {
-            k: v for k, v in tables['abbreviation_table'].items()
-        }
-        abbreviator.inverted_abbreviations = {
-            k: [tuple(u) for u in v]
-            for k, v in tables['inverted_abbreviations'].items()
-        }
+    def random_abbreviate(self, line, targets_set):
+        tokens = split_at_identifier_boundaries(line)
+        abbrev_tokens = []
 
-        return abbreviator
+        for t in tokens:
+            if t in targets_set:
+                abbrev_len = 1 + math.floor(random.expovariate(self.lambd))
+                abbrev_tokens.append(t[:abbrev_len])
+            else:
+                abbrev_tokens.append(t)
 
+        return ''.join(abbrev_tokens)
+
+    def generate_contrastive_examples(self, epoch_size, training_set):
+        positive_examples = random.sample(training_set, epoch_size)
+        examples = []
+        correct = 0
+
+        for ex in positive_examples:
+            abbrev = self.random_abbreviate(ex['l'], self.abbreviation_targets)
+            candidates = self.beam_search(abbrev, ex['i'], ex['c'], 2)
+            correct += candidates[0] == ex['l']
+            examples.append((ex, 1))
+            if len(candidates) > 1:
+                negative = candidates[0 if candidates[0] != ex['l'] else 1]
+                examples.append(({ **ex, 'l': negative }, 0))
+
+        return examples, correct / len(positive_examples)
+
+    def fit(self, tracker, training_set):
+        learning_rate = self.params.get('learning_rate') or 1e-3
+        momentum = self.params.get('momentum') or 0.9
+        batch_size = self.params.get('batch_size') or 32
+        init_scale = self.params.get('init_scale') or 0.1
+        epochs = self.params.get('epochs', 1)
+        epoch_size = self.params.get('epoch_size', 10**4)
+        log_every = self.params.get('log_every') or 100
+
+        active_training_set = []
+
+        batches_per_epoch = math.ceil(len(training_set) / batch_size)
+        total_batches = epochs * batches_per_epoch
+
+        optimizer = torch.optim.SGD(self.dlm.parameters(),
+                                    lr=learning_rate,
+                                    momentum=momentum)
+
+        for p in self.dlm.parameters():
+            p.data.uniform_(-init_scale, init_scale)
+
+        p = Progress(total_iterations=total_batches if epochs else None)
+
+        for e in range(epochs + 1):
+            print('Generating contrastive examples...')
+            active_training_set, acc = self.generate_contrastive_examples(
+                    epoch_size, training_set)
+
+            if e == epochs:
+                tracker.add_scalar('train/epoch_acc', acc)
+                break
+
+            random.shuffle(active_training_set)
+
+            for i, batch in enumerate(batched(active_training_set, batch_size)):
+                optimizer.zero_grad()
+                X, y = zip(*batch)
+                X_i, X_c = self.dlm.encode(X)
+                y_hat = self.dlm(X_i, X_c)
+                y_true = torch.tensor(y, dtype=torch.float).to(self.dlm.device)
+
+                loss = F.binary_cross_entropy(y_hat, y_true)
+                loss.backward()
+                optimizer.step()
+
+                acc = (y_hat.round() == y_true).float().mean().item()
+
+                if p.tick() % log_every == 0:
+                    print('Epoch {} batch {}: acc = {:.3f}, {}'.format(e, i, acc, p.format()))
+                    print(y_hat)
+
+                tracker.step()
+                tracker.add_scalar('train/loss', loss.item())
+
+            tracker.checkpoint()
 
 class AbbreviatorEvaluator:
     def __init__(self, common_strings, evaluation_set, batch_size=64):
@@ -590,3 +597,14 @@ def split_tokens(s):
     if len(last_t):
         t.append(''.join(last_t))
     return t
+
+def random_abbreviate(tokens, prefix_table):
+    new_tokens = []
+
+    for t in tokens:
+        if t in prefix_table and random.randint(0, 1):
+            new_tokens.append(random.choice(prefix_table[t]))
+        else:
+            new_tokens.append(t)
+
+    return new_tokens

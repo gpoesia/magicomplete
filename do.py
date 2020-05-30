@@ -323,6 +323,33 @@ def train_discriminative_language_model(params_path, device, contexts_to_run):
         lm.fit(ds, tracker, params)
         tracker.close()
 
+def train_discriminative_abbreviator(params_path, device, contexts_to_run):
+    print('Using device', device)
+    with open(params_path) as f:
+        params = json.load(f)
+
+    print('Loading dataset...')
+    with open(params['dataset']) as f:
+        dataset = json.load(f)
+
+    print('Finding abbreviation targets...')
+    targets = build_abbreviation_targets(params['n_targets'], dataset['train'])
+
+    contexts_to_run = contexts_to_run.split(',')
+
+    for i, ctx_value in enumerate(contexts_to_run):
+        params['dlm']['context'] = ctx_value
+        dlm = DiscriminativeLanguageModel(params['dlm'], device)
+        abbreviator = DiscriminativeLanguageAbbreviator(dlm, targets, params)
+
+        print('{}/{} Training with context = {}'.format(
+              i+1, len(contexts_to_run), ctx_value))
+
+        tracker = RunTracker(abbreviator, params)
+        tracker.start()
+        abbreviator.fit(tracker, dataset['train'])
+        tracker.close()
+
 def find_common_identifiers(dataset, min_length=2, max_length=50):
     frequencies = collections.Counter()
 
@@ -488,6 +515,9 @@ if __name__ == '__main__':
     parser.add_argument('--train-dlm',
                         help='Train Discriminative Language Model.',
                         action='store_const', const=True, default=False)
+    parser.add_argument('--train-dla',
+                        help='Train Discriminative Language Abbreviator.',
+                        action='store_const', const=True, default=False)
     parser.add_argument('--oneshot-eval-examples', type=int, default=100, help='How many positive/negative examples to fetch for each convention in the one-shot dataset')
     parser.add_argument('--abbreviations', type=int, default=1000, help='How many abbreviations scenarios to put in the one-shot dataset/use in abbreviator.')
     parser.add_argument('--one-convention', help='Limit to applying at most one convention per input.',
@@ -541,6 +571,12 @@ if __name__ == '__main__':
         )
     elif args.train_dlm:
         train_discriminative_language_model(
+                args.params,
+                torch.device(args.device),
+                args.contexts,
+        )
+    elif args.train_dla:
+        train_discriminative_abbreviator(
                 args.params,
                 torch.device(args.device),
                 args.contexts,

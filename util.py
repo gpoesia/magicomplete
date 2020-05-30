@@ -128,3 +128,17 @@ def split_at_identifier_boundaries(s):
         tokens[-1] += c
 
     return tuple(tokens)
+
+def is_subsequence(t1, t2):
+    '''Returns whether t1 is a subsequence of t2.'''
+    i1, i2 = 0, 0
+
+    if len(t1) > len(t2) or t1[0] != t2[0]:
+        return False
+
+    while i1 < len(t1) and i2 < len(t2):
+        if t1[i1] == t2[i2]:
+            i1 += 1
+        i2 += 1
+
+    return i1 == len(t1)
