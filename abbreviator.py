@@ -11,6 +11,7 @@ import json
 from models import load_from_run
 from language_model import RNNLanguageModel, DiscriminativeLanguageModel
 import math
+import time
 
 class AbbreviationAlgorithm:
     def generate_alternatives(self, string):
@@ -373,34 +374,53 @@ class DiscriminativeLanguageAbbreviator:
 
         return encoded_l, None
 
-    def beam_search(self, line, imports, identifiers, beam_size=None):
-        beam_size = beam_size or self.beam_size
+    def beam_search(self, queries, beam_size=None):
+        with torch.no_grad():
+            beam_size = beam_size or self.beam_size
+            tokens = [split_at_identifier_boundaries(r['l']) for r in queries]
+            candidates = [[()] for _ in queries]
 
-        i = 0
-        tokens = split_at_identifier_boundaries(line)
-        candidates = [()]
+            for t_i in range(max(len(t) for t in tokens)):
+                need_reranking = []
+                reranking_list = []
 
-        for i, t in enumerate(tokens):
-            next_candidates = []
+                for i in range(len(queries)):
+                    if t_i < len(tokens[i]):
+                        t = tokens[i][t_i]
+                        expansions = self.list_candidate_expansions(t)
+                        next_candidates = []
 
-            for c in candidates:
-                for expansion in self.list_candidate_expansions(t):
-                    next_candidates.append(c + (expansion,))
+                        for c in candidates[i]:
+                            for e in expansions:
+                                next_candidates.append(c + (e,))
 
-            # Rank candidates either in the last iteration or if there are too many.
-            if len(next_candidates) > 1 and \
-               (i == len(tokens) - 1 or len(next_candidates) > self.beam_size):
-                batch = [{ 'l': ''.join(c), 'i': imports, 'c': identifiers }
-                         for c in next_candidates]
-                encoded, ctx = self.dlm.encode(batch, True)
-                scores = self.dlm(encoded, ctx)
-                score_by_candidate = list(zip(scores.tolist(), next_candidates))
-                score_by_candidate.sort(reverse=True)
-                next_candidates = [c for _, c in score_by_candidate][:self.beam_size]
+                        candidates[i] = next_candidates
 
-            candidates = next_candidates
+                    if len(candidates[i]) > beam_size or \
+                            (len(candidates[i]) > 1 and t_i + 1 == len(tokens[i])):
+                        need_reranking.append((
+                            i, 
+                            len(reranking_list),
+                            len(reranking_list) + len(candidates[i])))
+                        reranking_list.extend({ 'l': ''.join(c), 
+                                                'i': queries[i]['i'],
+                                                'c': queries[i]['c'] }
+                                                for c in candidates[i])
 
-        return [''.join(c) for c in candidates]
+                if len(need_reranking) > 0:
+                    scores = []
+                    for batch in batched(reranking_list, self.batch_size):
+                        encoded, ctx = self.dlm.encode(batch)
+                        scores.extend(list(self.dlm(encoded, ctx)))
+
+                    for i, lo, hi in need_reranking:
+                        candidates_with_scores = list(zip(reranking_list[lo:hi],
+                                                          scores[lo:hi]))
+                        candidates_with_scores.sort(key=lambda cs: cs[1], reverse=True)
+                        candidates[i] = [split_at_identifier_boundaries(c['l'])
+                                         for c, _ in candidates_with_scores][:beam_size]
+
+            return [[''.join(c) for c in candidates_i] for candidates_i in candidates]
 
     def decode(self, batch_encoded, idx_ctx=None):
         return [self.beam_search(row['l'], row['i'], row['c'])[0] for row in batch_encoded]
@@ -442,75 +462,108 @@ class DiscriminativeLanguageAbbreviator:
 
         return ''.join(abbrev_tokens)
 
-    def generate_contrastive_examples(self, epoch_size, training_set):
-        positive_examples = random.sample(training_set, epoch_size)
+    def generate_contrastive_examples(self, N, training_set):
+        positive_examples = random.sample(training_set, 2*N)
         examples = []
-        correct = 0
+        examples_used, correct = 0, 0
 
-        for ex in positive_examples:
+        for ex in random.sample(training_set, 2*N):
             abbrev = self.random_abbreviate(ex['l'], self.abbreviation_targets)
-            candidates = self.beam_search(abbrev, ex['i'], ex['c'], 2)
-            correct += candidates[0] == ex['l']
-            examples.append((ex, 1))
-            if len(candidates) > 1:
-                negative = candidates[0 if candidates[0] != ex['l'] else 1]
-                examples.append(({ **ex, 'l': negative }, 0))
+            if abbrev != ex['l']:
+                examples.append((ex, abbrev))
+                if len(examples) == N:
+                    break
 
-        return examples, correct / len(positive_examples)
+        predictions = self.beam_search([{**ex, 'l': ab } for ex, ab in examples], 2)
+        contrastive_examples = []
+
+        for p, (ex, abbrev) in zip(predictions, examples):
+            correct += p[0] == ex['l']
+            negative = p[0 if p[0] != ex['l'] else 1]
+            tokens_pos = split_at_identifier_boundaries(ex['l'])
+            tokens_neg = split_at_identifier_boundaries(negative)
+            different = False
+
+            for i in range(len(tokens_pos)):
+                different = different or tokens_pos[i] != tokens_neg[i]
+                if different:
+                    contrastive_examples.append(
+                            ({ **ex, 'l': ''.join(tokens_pos[:i+1]) }, 1))
+                    contrastive_examples.append(
+                            ({ **ex, 'l': ''.join(tokens_neg[:i+1]) }, 0))
+
+        return contrastive_examples, correct / len(examples)
 
     def fit(self, tracker, training_set):
-        learning_rate = self.params.get('learning_rate') or 1e-3
-        momentum = self.params.get('momentum') or 0.9
+        learning_rate = self.params.get('learning_rate', 1e-3)
+        momentum = self.params.get('momentum', 0.9)
         batch_size = self.params.get('batch_size') or 32
         init_scale = self.params.get('init_scale') or 0.1
         epochs = self.params.get('epochs', 1)
+        eras = self.params.get('eras', 1)
         epoch_size = self.params.get('epoch_size', 10**4)
+        resample_every = self.params.get('resample_every', 3)
         log_every = self.params.get('log_every') or 100
+        gamma = self.params.get('gamma') or 1.0
 
         active_training_set = []
 
-        batches_per_epoch = math.ceil(len(training_set) / batch_size)
-        total_batches = epochs * batches_per_epoch
-
-        optimizer = torch.optim.SGD(self.dlm.parameters(),
-                                    lr=learning_rate,
-                                    momentum=momentum)
+        batches_per_epoch = math.ceil(epoch_size / batch_size)
+        total_batches = epochs * batches_per_epoch * eras
+        previous_examples = []
 
         for p in self.dlm.parameters():
-            p.data.uniform_(-init_scale, init_scale)
+            if len(p.shape) >= 2:
+                torch.nn.init.xavier_uniform_(p)
+            else:
+                torch.nn.init.uniform_(p, -init_scale, init_scale)
 
         p = Progress(total_iterations=total_batches if epochs else None)
 
         for e in range(epochs + 1):
+            optimizer = torch.optim.Adam(self.dlm.parameters(),
+                                         lr=learning_rate)
+
             print('Generating contrastive examples...')
+            before = time.time()
             active_training_set, acc = self.generate_contrastive_examples(
                     epoch_size, training_set)
 
+            print('Done in {:.1f}s. Accuracy: {:.2f}%'
+                  .format(time.time() - before, 100*acc))
+            tracker.add_scalar('train/epoch_acc', acc)
+
             if e == epochs:
-                tracker.add_scalar('train/epoch_acc', acc)
                 break
 
-            random.shuffle(active_training_set)
+            for era in range(eras):
+                era_training_set = (active_training_set +
+                                    random.sample(previous_examples,
+                                                  min(len(previous_examples),
+                                                      len(active_training_set))))
 
-            for i, batch in enumerate(batched(active_training_set, batch_size)):
-                optimizer.zero_grad()
-                X, y = zip(*batch)
-                X_i, X_c = self.dlm.encode(X)
-                y_hat = self.dlm(X_i, X_c)
-                y_true = torch.tensor(y, dtype=torch.float).to(self.dlm.device)
+                random.shuffle(era_training_set)
 
-                loss = F.binary_cross_entropy(y_hat, y_true)
-                loss.backward()
-                optimizer.step()
+                for i, batch in enumerate(batched(era_training_set, batch_size)):
+                    optimizer.zero_grad()
+                    X, y = zip(*batch)
+                    X_i, X_c = self.dlm.encode(X)
+                    y_hat = self.dlm(X_i, X_c)
+                    y_true = torch.tensor(y, dtype=torch.float).to(self.dlm.device)
 
-                acc = (y_hat.round() == y_true).float().mean().item()
+                    loss = F.binary_cross_entropy(y_hat, y_true)
+                    loss.backward()
+                    optimizer.step()
 
-                if p.tick() % log_every == 0:
-                    print('Epoch {} batch {}: acc = {:.3f}, {}'.format(e, i, acc, p.format()))
-                    print(y_hat)
+                    acc = (y_hat.round() == y_true).float().mean().item()
 
-                tracker.step()
-                tracker.add_scalar('train/loss', loss.item())
+                    if p.tick() % log_every == 0:
+                        print('Epoch {}/{} batch {}: loss = {:.3f}, acc = {:.2f}%, {}'.format(e, era, i, loss.item(), 100*acc, p.format()))
+
+                    tracker.step()
+                    tracker.add_scalar('train/loss', loss.item())
+
+            previous_examples.extend(active_training_set)
 
             tracker.checkpoint()
 
