@@ -3,7 +3,7 @@
 import torch
 from torch.nn import functional as F
 import torch.nn as nn
-import string
+import collections
 
 class AlphabetEncoding:
     def alphabet_size(self):
@@ -58,6 +58,147 @@ class AlphabetEncoding:
     def is_optimizeable(self):
         'Returns whether this encoder should be optimized in end-to-end training.'
         return False
+
+class BytePairEncoding(AlphabetEncoding):
+    NUM_ASCII = 128
+    PADDING_INDEX = 0
+    START_INDEX = 1
+    END_INDEX = 2
+
+    def __init__(self, params, device):
+        super().__init__()
+        self.device = device
+
+        self.v_size = params.get('vocabulary_size', 1000)
+        self.e_size = params.get('embedding_size', 256)
+        self.vocab = {}
+        self.piece2ind = {}
+        self.embedding = nn.Embedding(
+            self.v_size, self.e_size, padding_idx=self.PADDING_INDEX)
+
+    def compute_vocabulary(self, examples):
+        frequencies = collections.defaultdict(int)
+
+        for i in range(self.NUM_ASCII):
+            self.vocab[i] = chr(i)
+            self.piece2ind[chr(i)] = i
+
+        ds = [list(e) for e in examples]
+
+        while len(self.vocab) < self.v_size:
+            freq = collections.defaultdict(int)
+
+            for l in ds:
+                for i in range(len(l) - 1):
+                    freq[(l[i], l[i+1])] += 1
+
+            pair, _ = max(list(freq.items()), key=lambda p: p[1])
+            piece = pair[0] + pair[1]
+            index = len(self.vocab)
+            self.vocab[index] = piece
+            self.piece2ind[piece] = index
+
+            for i in range(len(ds)):
+                j, new_l = 0, []
+                s = ds[i]
+
+                while j < len(s):
+                    if j + 1 < len(s) and s[j] == pair[0] and s[j+1] == pair[1]:
+                        new_l.append(piece)
+                        j += 2
+                    else:
+                        new_l.append(s[j])
+                        j += 1
+
+                ds[i] = new_l
+
+            print('New piece:', piece)
+
+    def alphabet_size(self):
+        'Returns the number of characters in the alphabet.'
+        return self.v_size
+
+    def embedding_size(self):
+        'Returns number of dimensions in the embedding / encoding'
+        return self.e_size
+
+    def encode_indices(self, s, partial=False):
+        'Given a string, returns a 2D tensor representation of it.'
+        i, l = 0, []
+
+        while i < len(s):
+            last = self.piece2ind[s[i]]
+
+            for j in range(i+1, len(s) + 1):
+                index = self.piece2ind.get(s[i:j])
+                if index is None:
+                    break
+                last = index
+
+            l.append(last)
+            i = j
+
+        l_t = torch.tensor([self.START_INDEX] +
+                           l +
+                           ([] if partial else [self.END_INDEX]),
+                            dtype=torch.long, device=self.device)
+        return l_t
+
+    def encode(self, s):
+        idxs = self.encode_indices(s)
+        return self.embedding(idxs)
+
+    def embed(self, indices):
+        return self.embedding(indices)
+
+    def decode(self, t):
+        raise NotImplemented()
+
+    def get_padding_token(self):
+        return self.embedding(torch.tensor(self.PADDING_INDEX, device=self.device))
+
+    def get_start_token(self):
+        return self.embedding(torch.tensor(self.START_INDEX, device=self.device))
+
+    def get_end_token(self):
+        return self.embedding(torch.tensor(self.END_INDEX, device=self.device))
+
+    def end_token_index(self):
+        return self.END_INDEX
+
+    def padding_token_index(self):
+        return self.PADDING_INDEX
+
+    def encode_batch(self, batch):
+        if len(batch) == 0:
+            return torch.zeros((0, 0, self.EMBEDDING_SIZE), device=self.device)
+
+        return self.encode_tensor_indices(self.encode_batch_indices(batch))
+
+    def encode_batch_indices(self, batch, partial=False):
+        if len(batch) == 0:
+            return torch.zeros((0, 0), device=self.device)
+
+        indices = [self.encode_indices(s, partial)]
+
+        max_length = max(map(len, indices))
+        padding_tensor = torch.tensor([self.PADDING_INDEX],
+                                      dtype=torch.long, device=self.device)
+        return torch.stack(
+                [torch.cat([idx, padding_tensor.repeat(max_length - len(s))])
+                 for s in indices])
+
+    def char_to_index(self, c):
+        return self.piece2ind[c]
+
+    def index_to_char(self, i):
+        return self.vocab[i]
+
+    def encode_tensor_indices(self, batch):
+        return self.embedding(batch)
+
+    def is_optimizeable(self):
+        return True
 
 
 class AsciiOneHotEncoding(AlphabetEncoding):
