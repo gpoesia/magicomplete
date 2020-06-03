@@ -4,6 +4,7 @@ import torch
 from torch.nn import functional as F
 import torch.nn as nn
 import collections
+import json
 
 class AlphabetEncoding:
     def alphabet_size(self):
@@ -76,6 +77,9 @@ class BytePairEncoding(AlphabetEncoding):
         self.embedding = nn.Embedding(
             self.v_size, self.e_size, padding_idx=self.PADDING_INDEX)
 
+        if params.get('vocab_file'):
+            self.load_vocabulary(params['vocab_file'])
+
     def compute_vocabulary(self, examples):
         frequencies = collections.defaultdict(int)
 
@@ -112,7 +116,7 @@ class BytePairEncoding(AlphabetEncoding):
 
                 ds[i] = new_l
 
-            print('New piece:', piece)
+            print('New piece:', index, repr(piece))
 
     def alphabet_size(self):
         'Returns the number of characters in the alphabet.'
@@ -200,6 +204,18 @@ class BytePairEncoding(AlphabetEncoding):
     def is_optimizeable(self):
         return True
 
+    def dump_vocabulary(self, path):
+        with open(path, 'w') as f:
+            json.dump({
+                'vocab': self.vocab,
+                'piece2ind': self.piece2ind
+            }, f)
+
+    def load_vocabulary(self, path):
+        with open(path) as f:
+            v = json.load(f)
+            self.vocab = v['vocab']
+            self.piece2ind = v['piece2ind']
 
 class AsciiOneHotEncoding(AlphabetEncoding):
     '''One-hot encoding that only takes ASCII characters.

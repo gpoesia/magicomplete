@@ -538,9 +538,10 @@ class DiscriminativeLanguageAbbreviator:
 
             for era in range(eras):
                 era_training_set = (active_training_set +
-                                    random.sample(previous_examples,
-                                                  min(len(previous_examples),
-                                                      len(active_training_set))))
+                                    previous_examples)
+#                                    random.sample(previous_examples,
+#                                                  min(len(previous_examples),
+#                                                      len(active_training_set))))
 
                 random.shuffle(era_training_set)
 

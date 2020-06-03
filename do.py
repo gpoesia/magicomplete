@@ -22,6 +22,7 @@ from slack import send_message
 from run_tracker import RunTracker
 from language_model import RNNLanguageModel, DiscriminativeLanguageModel
 from models import load_from_run
+from alphabet import *
 
 def precompute_interactions(dataset, language, new_convention_every, one_convention=False):
     dataset = load_dataset(dataset)[language]['train']
@@ -490,6 +491,16 @@ def run_abbreviator_experiment(params_path, device):
 
     tracker.close()
 
+def compute_vocabulary(dataset, vocabulary_size, output):
+    bpe = BytePairEncoding({'vocabulary_size': vocabulary_size }, torch.device('cpu'))
+
+    print('Loading dataset {}...'.format(dataset))
+    with open(dataset) as f:
+        ds = json.load(f)
+
+    bpe.compute_vocabulary([r['l'] for r in ds['train']])
+    bpe.dump_vocabulary(output)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
 
@@ -518,6 +529,11 @@ if __name__ == '__main__':
     parser.add_argument('--train-dla',
                         help='Train Discriminative Language Abbreviator.',
                         action='store_const', const=True, default=False)
+    parser.add_argument('--compute-vocabulary',
+                        help='Compute Byte-Pair Encoding vocabulary',
+                        action='store_const', const=True, default=False)
+    parser.add_argument('--vocabulary-size', type=int, default=10000,
+                        help='Byte-Pair Encoding vocabulary size.')
     parser.add_argument('--oneshot-eval-examples', type=int, default=100, help='How many positive/negative examples to fetch for each convention in the one-shot dataset')
     parser.add_argument('--abbreviations', type=int, default=1000, help='How many abbreviations scenarios to put in the one-shot dataset/use in abbreviator.')
     parser.add_argument('--one-convention', help='Limit to applying at most one convention per input.',
@@ -585,4 +601,10 @@ if __name__ == '__main__':
         run_abbreviator_experiment(
                 args.params,
                 torch.device(args.device),
+        )
+    elif args.compute_vocabulary:
+        compute_vocabulary(
+                args.dataset,
+                args.vocabulary_size,
+                args.output
         )
