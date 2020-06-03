@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from cell import GatedCell
-from alphabet import AsciiEmbeddedEncoding
+from alphabet import AsciiEmbeddedEncoding, BytePairEncoding
 from context import *
 from cnn_set_embedding import CNNSetEmbedding
 from util import Progress, batched
@@ -174,9 +174,13 @@ class RNNLanguageModel(nn.Module):
 class DiscriminativeLanguageModel(nn.Module):
     def __init__(self, params, device):
         super().__init__()
-
-        self.alphabet = AsciiEmbeddedEncoding(device)
         self.device = device
+
+        encoding_type = params.get('encoding', {}).get('type', 'CHAR')
+        if encoding_type == 'CHAR':
+            self.alphabet = AsciiEmbeddedEncoding(device)
+        else:
+            self.alphabet = BytePairEncoding(params.get('encoding'), device)
 
         hidden_size = params.get('hidden_size', 128)
         context = Context.parse(params.get('context', 'NONE'))

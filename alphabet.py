@@ -60,7 +60,7 @@ class AlphabetEncoding:
         'Returns whether this encoder should be optimized in end-to-end training.'
         return False
 
-class BytePairEncoding(AlphabetEncoding):
+class BytePairEncoding(AlphabetEncoding, nn.Module):
     NUM_ASCII = 128
     PADDING_INDEX = 0
     START_INDEX = 1
@@ -183,14 +183,14 @@ class BytePairEncoding(AlphabetEncoding):
         if len(batch) == 0:
             return torch.zeros((0, 0), device=self.device)
 
-        indices = [self.encode_indices(s, partial)]
+        indices = [self.encode_indices(s, partial) for s in batch]
 
         max_length = max(map(len, indices))
         padding_tensor = torch.tensor([self.PADDING_INDEX],
                                       dtype=torch.long, device=self.device)
         return torch.stack(
-                [torch.cat([idx, padding_tensor.repeat(max_length - len(s))])
-                 for s in indices])
+                [torch.cat([idx, padding_tensor.repeat(max_length - len(idx))])
+                 for idx in indices])
 
     def char_to_index(self, c):
         return self.piece2ind[c]
