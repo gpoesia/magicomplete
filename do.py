@@ -542,8 +542,8 @@ if __name__ == '__main__':
                         help='Path to dataset with contextualized lines.')
     parser.add_argument('--set-embedding',
                         help='Path to pre-trained Set Embedding model.')
-    parser.add_argument('--contexts', default='',
-                        help='Comma-separated list of context flags to consider. Default: all.')
+    parser.add_argument('--contexts', default='NONE',
+                        help='Comma-separated list of context flags to consider. Default: only run with context=NONE.')
     parser.add_argument('--decoders',
                         help='Prefix of path to decoders.')
     parser.add_argument('-o', '--output',
