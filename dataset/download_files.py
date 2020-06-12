@@ -15,8 +15,7 @@ def is_comment(line):
     return line.startswith('#') or line.startswith("'") or line.startswith('"')
 
 def clean_line(line):
-    line = line.strip()
-    return (line or None) if not is_comment(line) else None
+    return (line or None) if not is_comment(line.strip()) else None
 
 def sample_files_from_repo(path):
     MAX_FILES_PER_REPO = 100
@@ -43,7 +42,7 @@ with open(sys.argv[1]) as f:
 downloads, skipped = 0, 0
 
 files_by_language = collections.defaultdict(set)
-DESIRED_FILES = 10**1
+DESIRED_FILES = 10**5
 
 random.shuffle(repos)
 
@@ -85,7 +84,7 @@ for l in LANGUAGES:
         dataset[l][s] = files[assigned_files:split_limit]
         assigned_files = split_limit
 
-with open('dataset-files.json', 'w') as f:
+with open('100k-files.json', 'w') as f:
     json.dump(dataset, f)
 
 print("{} repositories downloaded, {} skipped.".format(downloads, skipped))

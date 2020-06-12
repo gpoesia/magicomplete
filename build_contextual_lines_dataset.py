@@ -9,10 +9,13 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-f', '--files-dataset', help='Path to the files dataset.',
                     default='dataset-files.json')
 parser.add_argument('-c', '--context-size', help='Maximum number of identifiers in the context of a line.', type=int, default=10)
+parser.add_argument('-p', '--previous', help='Number of previous lines to include for each example.', type=int, default=10)
 parser.add_argument('-m', '--min-length', help='Minimum line length.', type=int, default=4)
 parser.add_argument('-M', '--max-length', help='Maximum line length.', type=int, default=80)
 parser.add_argument('-N', '--max-name-length', help='Maximum name of a name in context or imports.', type=int, default=20)
 parser.add_argument('-e', '--examples-from-file', help='Maximum number of examples to extract from a single file.', type=int, default=20)
+parser.add_argument('-n', '--n-files', help='Number of files to use.', type=int, default=1000)
+parser.add_argument('-o', '--output', help='Output file.', default='lines.json')
 
 opt = parser.parse_args()
 
@@ -61,12 +64,12 @@ def example_is_valid(context, imports, line):
     return True
 
 def build_examples_from_file(f):
-    ids, imports, examples = [], set(), []
+    ids, imports, lines, examples = [], set(), [], []
 
-    for line in f.split('\n'):
-        line = line.strip()
+    for line_raw in f.split('\n'):
+        line = line_raw.strip()
 
-        # Coments and doc strings
+        # Comments and doc strings
         if (line.startswith('#') or
                 line.startswith('"') or
                 line.startswith("'")):
@@ -75,7 +78,8 @@ def build_examples_from_file(f):
 
         c, i = ids[-opt.context_size:], list(imports)
         if example_is_valid(c, i, line):
-            examples.append({ 'c': c, 'i': i, 'l': line })
+            lines.append(line_raw)
+            examples.append({ 'c': c, 'i': i, 'l': line, 'p': lines[-opt.previous:]})
 
         ids.extend(extract_identifiers(line))
         imports.update(extract_imports(line))
@@ -102,17 +106,19 @@ if __name__ == '__main__':
         print('Loading', opt.files_dataset, '...')
         files_dataset = json.load(f)['Python']
         files_count = sum(map(len, files_dataset.values()))
-        print(files_count, 'files in the dataset.')
+        n = min(files_count, opt.n_files)
+        print(files_count, 'files in the dataset. Using', n)
         dataset = {}
 
-        p = Progress(files_count)
+        p = Progress(n)
 
         for split, files in files_dataset.items():
-            dataset[split] = build_dataset(files, p)
+            dataset[split] = build_dataset(
+                    random.sample(files, int(n / files_count * len(files))), p)
 
         print('Split sizes:')
         for split, examples in dataset.items():
             print('{}: {} examples'.format(split, len(examples)))
 
-        with open('contextualized-lines-small.json', 'w') as f:
+        with open(opt.output, 'w') as f:
             json.dump(dataset, f)
