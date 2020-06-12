@@ -2,14 +2,14 @@ function! MagicExpand()
   python3 magicomplete.handle_expand()
 endfunction
 function! MagicHint()
-  python3 magicomplete.handle_newline()
+  python3 magicomplete.handle_change()
 endfunction
 
 command! -nargs=0 MagicExpand call MagicExpand()
 command! -nargs=0 MagicHint call MagicHint()
 
-imap <C-J> <CR><C-O>:call MagicExpand()<CR>
-inoremap <CR> <CR><C-O>:call MagicHint()<CR>
+imap <C-J> <C-O>:call MagicExpand()<CR><C-O>$<CR>
+autocmd TextChangedI * :call MagicHint()
 
 let s:plugin_root_dir = fnamemodify(resolve(expand('<sfile>:p')), ':h')
 python3 << EOF
