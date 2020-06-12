@@ -13,7 +13,7 @@ from cnn_set_embedding import CNNSetEmbedding
 from util import Progress, batched
 
 def split(batch):
-    return zip(*[(r['l'], r['c'], r['i']) for r in batch])
+    return zip(*[(r['l'], r['c'], r['i'], r.get('s')) for r in batch])
 
 class RNNLanguageModel(nn.Module):
     def __init__(self, params, device):
@@ -160,7 +160,7 @@ class RNNLanguageModel(nn.Module):
 
         with torch.autograd.set_grad_enabled(grad):
             for batch in batched(dataset, batch_size or len(dataset)):
-                batch_l, batch_c, batch_i = split(batch)
+                batch_l, batch_c, batch_i, batch_s = split(batch)
                 idx, ctx = self.encode(batch_l, batch_i, batch_c, partial)
                 lengths = torch.tensor([len(i) + (not partial) for i in batch_l], device=self.device)
 
@@ -182,6 +182,18 @@ class DiscriminativeLanguageModel(nn.Module):
         else:
             self.alphabet = BytePairEncoding(params.get('encoding'), device)
 
+        self.embed_signal = params.get('embed_signal', False)
+
+        if self.embed_signal:
+            signal_embedding_size = params.get('signal_embedding_size', 50)
+            signal_kernel_size = params.get('signal_kernel_size', 5)
+            self.signal_conv = nn.Conv1d(self.alphabet.embedding_size(),
+                                         signal_embedding_size,
+                                         signal_kernel_size,
+                                         padding=(signal_kernel_size // 2))
+        else:
+            signal_embedding_size = 0
+
         hidden_size = params.get('hidden_size', 128)
         context = Context.parse(params.get('context', 'NONE'))
         context_algorithm = ContextAlgorithm.parse(params.get('context_algorithm', 'NONE'))
@@ -194,7 +206,9 @@ class DiscriminativeLanguageModel(nn.Module):
 
         self.cell = GatedCell({
             **cell_params,
-            'input_size': self.alphabet.embedding_size() + context_input_size,
+            'input_size': self.alphabet.embedding_size() +
+                          context_input_size +
+                          signal_embedding_size,
             'hidden_size': hidden_size,
         })
 
@@ -207,7 +221,7 @@ class DiscriminativeLanguageModel(nn.Module):
         self.to(device)
 
     def encode(self, batch, partial=False):
-        batch_l, batch_i, batch_c = split(batch)
+        batch_l, batch_i, batch_c, batch_s = split(batch)
         C_idx = self.alphabet.encode_batch_indices(batch_l, partial)
 
         if self.context:
@@ -224,6 +238,11 @@ class DiscriminativeLanguageModel(nn.Module):
             ctx = torch.zeros((len(batch_l), 0),
                               dtype=torch.float,
                               device=self.device)
+
+        if self.embed_signal:
+            signals = self.alphabet.encode_batch(batch_s)
+            embedded_signals, _ = self.signal_conv(signals.transpose(1, 2)).max(dim=2)
+            ctx = torch.cat([ctx, embedded_signals], dim=1)
 
         return C_idx, ctx
 

@@ -3,6 +3,7 @@
 import argparse
 from util import *
 import torch
+import shutil
 import baseline
 from set_embedding import SetEmbedding
 import collections
@@ -321,7 +322,10 @@ def train_discriminative_language_model(params_path, device, contexts_to_run):
 
         tracker = RunTracker(lm, params)
         tracker.start()
-        lm.fit(ds, tracker, params)
+        try:
+            lm.fit(ds, tracker, params)
+        except KeyboardInterrupt:
+            print('Interrupting run.')
         tracker.close()
 
 def train_discriminative_abbreviator(params_path, device, contexts_to_run):
@@ -464,14 +468,14 @@ def run_abbreviator_experiment(params_path, device):
             params['abbreviator'],
         )
     elif params['abbreviator']['type'] == 'DLA':
-        dlm = load_from_run(DiscriminativeLanguageModel,
-                            params['abbreviator']['dlm'], device)
-
-        abbreviator = DiscriminativeLanguageAbbreviator(
-            dlm,
-            ds['train'],
-            params['abbreviator'],
+        abbreviator = DiscriminativeLanguageAbbreviator.load(
+            'models/{}.model'.format(params['abbreviator']['pretraining_run']),
+            device
         )
+        abbreviator.abbreviation_targets = []
+        abbreviator.abbreviation_targets_set = set()
+        abbreviator.inverted_abbreviations = collections.defaultdict(list)
+        abbreviator.training_set = ds['train']
 
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
@@ -482,6 +486,8 @@ def run_abbreviator_experiment(params_path, device):
     tracker.start()
     print('Evaluating', abbreviator.name())
     results = evaluator.evaluate(abbreviator, p, tracker)
+
+    abbreviator.dump('models/{}.model'.format(tracker.run_id))
 
     print('Accuracy: {:.2f}%, Success rate: {:.2f}%, compression: {:.2f}%, abbreviation compression: {:.2f}%\n'
           .format(100*results['accuracy'],
@@ -500,6 +506,24 @@ def compute_vocabulary(dataset, vocabulary_size, output):
 
     bpe.compute_vocabulary([r['l'] for r in ds['train']])
     bpe.dump_vocabulary(output)
+
+def find_best_model(run_id, metric):
+    with open('runs/{}.json'.format(run_id)) as f:
+        run_report = json.load(f)
+
+    best = None
+
+    for i, d in enumerate(run_report[metric]):
+        if best is None or d['value'] > run_report[metric][best]['value']:
+            best = i
+
+    checkpoint = 'models/{}_check{}.model'.format(run_id, best + 1)
+    dest = 'models/{}.model'.format(run_id)
+
+    print('Best checkpoint: {} ({} = {})'
+          .format(checkpoint, metric, run_report[metric][best]['value']))
+
+    shutil.copy(checkpoint, dest)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('ConadComplete utilities')
@@ -555,6 +579,10 @@ if __name__ == '__main__':
                         help='Number of epochs to train for.')
     parser.add_argument('--params',
                         help='JSON file to read parameters from.')
+    parser.add_argument('--find-best', default=None,
+                        help='Update the model with its best checkpoint.')
+    parser.add_argument('--metric',
+                        help='Metric to use in --find-best')
 
     args = parser.parse_args()
 
@@ -607,4 +635,9 @@ if __name__ == '__main__':
                 args.dataset,
                 args.vocabulary_size,
                 args.output
+        )
+    elif args.find_best:
+        find_best_model(
+                run_id=args.find_best,
+                metric=args.metric,
         )
