@@ -1,0 +1,10 @@
+{
+  "/dataset": {
+    "target": "http://localhost:3333",
+    "secure": false
+  },
+  "/save-events": {
+    "target": "http://localhost:3333",
+    "secure": false
+  }
+}

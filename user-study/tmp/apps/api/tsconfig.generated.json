@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "@cocolab/api-interfaces": [
+        "libs/api-interfaces/src/index.ts"
+      ]
+    }
+  },
+  "extends": "../../../apps/api/tsconfig.app.json"
+}

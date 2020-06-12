@@ -1,0 +1,1206 @@
+{
+  "projectGraph": {
+    "nodes": {
+      "autocomplete-user-study-e2e": {
+        "name": "autocomplete-user-study-e2e",
+        "type": "e2e",
+        "data": {
+          "root": "apps/autocomplete-user-study-e2e",
+          "sourceRoot": "apps/autocomplete-user-study-e2e/src",
+          "projectType": "application",
+          "architect": {
+            "e2e": {
+              "builder": "@nrwl/cypress:cypress",
+              "options": {
+                "cypressConfig": "apps/autocomplete-user-study-e2e/cypress.json",
+                "tsConfig": "apps/autocomplete-user-study-e2e/tsconfig.e2e.json",
+                "devServerTarget": "autocomplete-user-study:serve"
+              },
+              "configurations": {
+                "production": {
+                  "devServerTarget": "autocomplete-user-study:serve:production"
+                }
+              }
+            },
+            "lint": {
+              "builder": "@nrwl/linter:lint",
+              "options": {
+                "linter": "eslint",
+                "config": "apps/autocomplete-user-study-e2e/.eslintrc",
+                "tsConfig": [
+                  "apps/autocomplete-user-study-e2e/tsconfig.e2e.json"
+                ],
+                "exclude": [
+                  "**/node_modules/**",
+                  "!apps/autocomplete-user-study-e2e/**"
+                ]
+              }
+            }
+          },
+          "tags": [],
+          "files": [
+            {
+              "file": "apps/autocomplete-user-study-e2e/.eslintrc",
+              "ext": "",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/cypress.json",
+              "ext": ".json",
+              "mtime": 1591754312425.1907
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/src/fixtures/example.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/src/integration/app.spec.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/src/plugins/index.js",
+              "ext": ".js",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/src/support/app.po.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/src/support/commands.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/src/support/index.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/tsconfig.e2e.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "apps/autocomplete-user-study-e2e/tsconfig.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            }
+          ]
+        }
+      },
+      "autocomplete-user-study": {
+        "name": "autocomplete-user-study",
+        "type": "app",
+        "data": {
+          "root": "apps/autocomplete-user-study",
+          "sourceRoot": "apps/autocomplete-user-study/src",
+          "projectType": "application",
+          "schematics": {},
+          "architect": {
+            "build": {
+              "builder": "@nrwl/web:build",
+              "options": {
+                "outputPath": "dist/apps/autocomplete-user-study",
+                "index": "apps/autocomplete-user-study/src/index.html",
+                "main": "apps/autocomplete-user-study/src/main.tsx",
+                "polyfills": "apps/autocomplete-user-study/src/polyfills.ts",
+                "tsConfig": "apps/autocomplete-user-study/tsconfig.app.json",
+                "assets": [
+                  "apps/autocomplete-user-study/src/favicon.ico",
+                  "apps/autocomplete-user-study/src/assets"
+                ],
+                "styles": [
+                  "apps/autocomplete-user-study/src/styles.scss"
+                ],
+                "scripts": [],
+                "webpackConfig": "apps/autocomplete-user-study/webpack.config"
+              },
+              "configurations": {
+                "production": {
+                  "fileReplacements": [
+                    {
+                      "replace": "apps/autocomplete-user-study/src/environments/environment.ts",
+                      "with": "apps/autocomplete-user-study/src/environments/environment.prod.ts"
+                    }
+                  ],
+                  "optimization": true,
+                  "outputHashing": "all",
+                  "sourceMap": false,
+                  "extractCss": true,
+                  "namedChunks": false,
+                  "extractLicenses": true,
+                  "vendorChunk": false,
+                  "budgets": [
+                    {
+                      "type": "initial",
+                      "maximumWarning": "2mb",
+                      "maximumError": "5mb"
+                    }
+                  ]
+                }
+              }
+            },
+            "serve": {
+              "builder": "@nrwl/web:dev-server",
+              "options": {
+                "buildTarget": "autocomplete-user-study:build",
+                "proxyConfig": "apps/autocomplete-user-study/proxy.conf.json"
+              },
+              "configurations": {
+                "production": {
+                  "buildTarget": "autocomplete-user-study:build:production"
+                }
+              }
+            },
+            "lint": {
+              "builder": "@nrwl/linter:lint",
+              "options": {
+                "linter": "eslint",
+                "config": "apps/autocomplete-user-study/.eslintrc",
+                "tsConfig": [
+                  "apps/autocomplete-user-study/tsconfig.app.json",
+                  "apps/autocomplete-user-study/tsconfig.spec.json"
+                ],
+                "exclude": [
+                  "**/node_modules/**",
+                  "!apps/autocomplete-user-study/**"
+                ]
+              }
+            },
+            "test": {
+              "builder": "@nrwl/jest:jest",
+              "options": {
+                "jestConfig": "apps/autocomplete-user-study/jest.config.js",
+                "tsConfig": "apps/autocomplete-user-study/tsconfig.spec.json",
+                "passWithNoTests": true
+              }
+            }
+          },
+          "tags": [],
+          "files": [
+            {
+              "file": "apps/autocomplete-user-study/.eslintrc",
+              "ext": "",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/browserslist",
+              "ext": "",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/jest.config.js",
+              "ext": ".js",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/proxy.conf.json",
+              "ext": ".json",
+              "mtime": 1591997918860.2122
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/Dataset.js",
+              "ext": ".js",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/Progress.js",
+              "ext": ".js",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/TypingTask.js",
+              "ext": ".js",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/app.scss",
+              "ext": ".scss",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/app.spec.tsx",
+              "ext": ".tsx",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/app.tsx",
+              "ext": ".tsx",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/logo.svg",
+              "ext": ".svg",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/app/star.svg",
+              "ext": ".svg",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/assets/.gitkeep",
+              "ext": "",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/environments/environment.prod.ts",
+              "ext": ".ts",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/environments/environment.ts",
+              "ext": ".ts",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/favicon.ico",
+              "ext": ".ico",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/index.html",
+              "ext": ".html",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/main.tsx",
+              "ext": ".tsx",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/polyfills.ts",
+              "ext": ".ts",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/src/styles.scss",
+              "ext": ".scss",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "apps/autocomplete-user-study/tsconfig.app.json",
+              "ext": ".json",
+              "mtime": 1591754312425.1907
+            },
+            {
+              "file": "apps/autocomplete-user-study/tsconfig.json",
+              "ext": ".json",
+              "mtime": 1591754312425.1907
+            },
+            {
+              "file": "apps/autocomplete-user-study/tsconfig.spec.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "apps/autocomplete-user-study/webpack.config.js",
+              "ext": ".js",
+              "mtime": 1591999386597.7686
+            }
+          ]
+        }
+      },
+      "api-interfaces": {
+        "name": "api-interfaces",
+        "type": "lib",
+        "data": {
+          "root": "libs/api-interfaces",
+          "sourceRoot": "libs/api-interfaces/src",
+          "projectType": "library",
+          "schematics": {},
+          "architect": {
+            "lint": {
+              "builder": "@nrwl/linter:lint",
+              "options": {
+                "linter": "eslint",
+                "config": "libs/api-interfaces/.eslintrc",
+                "tsConfig": [
+                  "libs/api-interfaces/tsconfig.lib.json",
+                  "libs/api-interfaces/tsconfig.spec.json"
+                ],
+                "exclude": [
+                  "**/node_modules/**",
+                  "!libs/api-interfaces/**"
+                ]
+              }
+            },
+            "test": {
+              "builder": "@nrwl/jest:jest",
+              "options": {
+                "jestConfig": "libs/api-interfaces/jest.config.js",
+                "tsConfig": "libs/api-interfaces/tsconfig.spec.json",
+                "passWithNoTests": true
+              }
+            }
+          },
+          "tags": [],
+          "files": [
+            {
+              "file": "libs/api-interfaces/.eslintrc",
+              "ext": "",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "libs/api-interfaces/README.md",
+              "ext": ".md",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "libs/api-interfaces/jest.config.js",
+              "ext": ".js",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "libs/api-interfaces/src/index.ts",
+              "ext": ".ts",
+              "mtime": 1591999386597.7686
+            },
+            {
+              "file": "libs/api-interfaces/src/lib/api-interfaces.ts",
+              "ext": ".ts",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "libs/api-interfaces/tsconfig.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "libs/api-interfaces/tsconfig.lib.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "libs/api-interfaces/tsconfig.spec.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            }
+          ]
+        }
+      },
+      "api": {
+        "name": "api",
+        "type": "app",
+        "data": {
+          "root": "apps/api",
+          "sourceRoot": "apps/api/src",
+          "projectType": "application",
+          "prefix": "api",
+          "schematics": {},
+          "architect": {
+            "build": {
+              "builder": "@nrwl/node:build",
+              "options": {
+                "outputPath": "dist/apps/api",
+                "main": "apps/api/src/main.ts",
+                "tsConfig": "apps/api/tsconfig.app.json",
+                "assets": [
+                  "apps/api/src/assets"
+                ]
+              },
+              "configurations": {
+                "production": {
+                  "optimization": true,
+                  "extractLicenses": true,
+                  "inspect": false,
+                  "fileReplacements": [
+                    {
+                      "replace": "apps/api/src/environments/environment.ts",
+                      "with": "apps/api/src/environments/environment.prod.ts"
+                    }
+                  ]
+                }
+              }
+            },
+            "serve": {
+              "builder": "@nrwl/node:execute",
+              "options": {
+                "buildTarget": "api:build"
+              }
+            },
+            "lint": {
+              "builder": "@nrwl/linter:lint",
+              "options": {
+                "linter": "eslint",
+                "config": "apps/api/.eslintrc",
+                "tsConfig": [
+                  "apps/api/tsconfig.app.json",
+                  "apps/api/tsconfig.spec.json"
+                ],
+                "exclude": [
+                  "**/node_modules/**",
+                  "!apps/api/**"
+                ]
+              }
+            },
+            "test": {
+              "builder": "@nrwl/jest:jest",
+              "options": {
+                "jestConfig": "apps/api/jest.config.js",
+                "tsConfig": "apps/api/tsconfig.spec.json",
+                "passWithNoTests": true
+              }
+            }
+          },
+          "tags": [],
+          "files": [
+            {
+              "file": "apps/api/.eslintrc",
+              "ext": "",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/jest.config.js",
+              "ext": ".js",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/src/app/.gitkeep",
+              "ext": "",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/src/assets/.gitkeep",
+              "ext": "",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/src/environments/environment.prod.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/src/environments/environment.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/src/main.ts",
+              "ext": ".ts",
+              "mtime": 1591999386594.4353
+            },
+            {
+              "file": "apps/api/tsconfig.app.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "apps/api/tsconfig.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            },
+            {
+              "file": "apps/api/tsconfig.spec.json",
+              "ext": ".json",
+              "mtime": 1591754312428.524
+            }
+          ]
+        }
+      },
+      "body-parser": {
+        "type": "npm",
+        "name": "body-parser",
+        "data": {
+          "version": "^1.19.0",
+          "files": []
+        }
+      },
+      "document-register-element": {
+        "type": "npm",
+        "name": "document-register-element",
+        "data": {
+          "version": "1.13.1",
+          "files": []
+        }
+      },
+      "express": {
+        "type": "npm",
+        "name": "express",
+        "data": {
+          "version": "4.17.1",
+          "files": []
+        }
+      },
+      "leven": {
+        "type": "npm",
+        "name": "leven",
+        "data": {
+          "version": "^3.1.0",
+          "files": []
+        }
+      },
+      "mdiff": {
+        "type": "npm",
+        "name": "mdiff",
+        "data": {
+          "version": "^1.3.0",
+          "files": []
+        }
+      },
+      "monaco-editor-webpack-plugin": {
+        "type": "npm",
+        "name": "monaco-editor-webpack-plugin",
+        "data": {
+          "version": "^1.9.0",
+          "files": []
+        }
+      },
+      "mongoose": {
+        "type": "npm",
+        "name": "mongoose",
+        "data": {
+          "version": "^5.9.18",
+          "files": []
+        }
+      },
+      "react": {
+        "type": "npm",
+        "name": "react",
+        "data": {
+          "version": "16.12.0",
+          "files": []
+        }
+      },
+      "react-dom": {
+        "type": "npm",
+        "name": "react-dom",
+        "data": {
+          "version": "16.12.0",
+          "files": []
+        }
+      },
+      "react-monaco-editor": {
+        "type": "npm",
+        "name": "react-monaco-editor",
+        "data": {
+          "version": "^0.36.0",
+          "files": []
+        }
+      },
+      "@nrwl/workspace": {
+        "type": "npm",
+        "name": "@nrwl/workspace",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@types/node": {
+        "type": "npm",
+        "name": "@types/node",
+        "data": {
+          "version": "~8.9.4",
+          "files": []
+        }
+      },
+      "dotenv": {
+        "type": "npm",
+        "name": "dotenv",
+        "data": {
+          "version": "6.2.0",
+          "files": []
+        }
+      },
+      "ts-node": {
+        "type": "npm",
+        "name": "ts-node",
+        "data": {
+          "version": "~7.0.0",
+          "files": []
+        }
+      },
+      "tslint": {
+        "type": "npm",
+        "name": "tslint",
+        "data": {
+          "version": "~6.0.0",
+          "files": []
+        }
+      },
+      "eslint": {
+        "type": "npm",
+        "name": "eslint",
+        "data": {
+          "version": "6.8.0",
+          "files": []
+        }
+      },
+      "typescript": {
+        "type": "npm",
+        "name": "typescript",
+        "data": {
+          "version": "~3.8.3",
+          "files": []
+        }
+      },
+      "prettier": {
+        "type": "npm",
+        "name": "prettier",
+        "data": {
+          "version": "2.0.4",
+          "files": []
+        }
+      },
+      "@nrwl/react": {
+        "type": "npm",
+        "name": "@nrwl/react",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@nrwl/express": {
+        "type": "npm",
+        "name": "@nrwl/express",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@nrwl/jest": {
+        "type": "npm",
+        "name": "@nrwl/jest",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "jest": {
+        "type": "npm",
+        "name": "jest",
+        "data": {
+          "version": "25.2.3",
+          "files": []
+        }
+      },
+      "@types/jest": {
+        "type": "npm",
+        "name": "@types/jest",
+        "data": {
+          "version": "25.1.4",
+          "files": []
+        }
+      },
+      "ts-jest": {
+        "type": "npm",
+        "name": "ts-jest",
+        "data": {
+          "version": "25.2.1",
+          "files": []
+        }
+      },
+      "cypress": {
+        "type": "npm",
+        "name": "cypress",
+        "data": {
+          "version": "^4.1.0",
+          "files": []
+        }
+      },
+      "@nrwl/cypress": {
+        "type": "npm",
+        "name": "@nrwl/cypress",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@nrwl/web": {
+        "type": "npm",
+        "name": "@nrwl/web",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@types/react": {
+        "type": "npm",
+        "name": "@types/react",
+        "data": {
+          "version": "16.9.17",
+          "files": []
+        }
+      },
+      "@types/react-dom": {
+        "type": "npm",
+        "name": "@types/react-dom",
+        "data": {
+          "version": "16.9.4",
+          "files": []
+        }
+      },
+      "@testing-library/react": {
+        "type": "npm",
+        "name": "@testing-library/react",
+        "data": {
+          "version": "9.4.0",
+          "files": []
+        }
+      },
+      "@nrwl/eslint-plugin-nx": {
+        "type": "npm",
+        "name": "@nrwl/eslint-plugin-nx",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@typescript-eslint/parser": {
+        "type": "npm",
+        "name": "@typescript-eslint/parser",
+        "data": {
+          "version": "2.19.2",
+          "files": []
+        }
+      },
+      "@typescript-eslint/eslint-plugin": {
+        "type": "npm",
+        "name": "@typescript-eslint/eslint-plugin",
+        "data": {
+          "version": "2.19.2",
+          "files": []
+        }
+      },
+      "eslint-config-prettier": {
+        "type": "npm",
+        "name": "eslint-config-prettier",
+        "data": {
+          "version": "6.0.0",
+          "files": []
+        }
+      },
+      "eslint-plugin-import": {
+        "type": "npm",
+        "name": "eslint-plugin-import",
+        "data": {
+          "version": "2.19.1",
+          "files": []
+        }
+      },
+      "eslint-plugin-jsx-a11y": {
+        "type": "npm",
+        "name": "eslint-plugin-jsx-a11y",
+        "data": {
+          "version": "6.2.3",
+          "files": []
+        }
+      },
+      "eslint-plugin-react": {
+        "type": "npm",
+        "name": "eslint-plugin-react",
+        "data": {
+          "version": "7.17.0",
+          "files": []
+        }
+      },
+      "eslint-plugin-react-hooks": {
+        "type": "npm",
+        "name": "eslint-plugin-react-hooks",
+        "data": {
+          "version": "2.3.0",
+          "files": []
+        }
+      },
+      "@nrwl/node": {
+        "type": "npm",
+        "name": "@nrwl/node",
+        "data": {
+          "version": "9.3.0",
+          "files": []
+        }
+      },
+      "@types/express": {
+        "type": "npm",
+        "name": "@types/express",
+        "data": {
+          "version": "4.17.0",
+          "files": []
+        }
+      }
+    },
+    "dependencies": {
+      "autocomplete-user-study-e2e": [
+        {
+          "type": "implicit",
+          "source": "autocomplete-user-study-e2e",
+          "target": "autocomplete-user-study"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study-e2e",
+          "target": "@nrwl/cypress"
+        }
+      ],
+      "autocomplete-user-study": [
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "react"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "react-monaco-editor"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "leven"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "@testing-library/react"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "react-dom"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "monaco-editor-webpack-plugin"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
+          "target": "@nrwl/react"
+        }
+      ],
+      "api-interfaces": [],
+      "api": [
+        {
+          "type": "static",
+          "source": "api",
+          "target": "express"
+        },
+        {
+          "type": "static",
+          "source": "api",
+          "target": "body-parser"
+        },
+        {
+          "type": "static",
+          "source": "api",
+          "target": "mongoose"
+        }
+      ],
+      "body-parser": [],
+      "document-register-element": [],
+      "express": [],
+      "leven": [],
+      "mdiff": [],
+      "monaco-editor-webpack-plugin": [],
+      "mongoose": [],
+      "react": [],
+      "react-dom": [],
+      "react-monaco-editor": [],
+      "@nrwl/workspace": [],
+      "@types/node": [],
+      "dotenv": [],
+      "ts-node": [],
+      "tslint": [],
+      "eslint": [],
+      "typescript": [],
+      "prettier": [],
+      "@nrwl/react": [],
+      "@nrwl/express": [],
+      "@nrwl/jest": [],
+      "jest": [],
+      "@types/jest": [],
+      "ts-jest": [],
+      "cypress": [],
+      "@nrwl/cypress": [],
+      "@nrwl/web": [],
+      "@types/react": [],
+      "@types/react-dom": [],
+      "@testing-library/react": [],
+      "@nrwl/eslint-plugin-nx": [],
+      "@typescript-eslint/parser": [],
+      "@typescript-eslint/eslint-plugin": [],
+      "eslint-config-prettier": [],
+      "eslint-plugin-import": [],
+      "eslint-plugin-jsx-a11y": [],
+      "eslint-plugin-react": [],
+      "eslint-plugin-react-hooks": [],
+      "@nrwl/node": [],
+      "@types/express": []
+    }
+  },
+  "fileMap": {
+    "autocomplete-user-study-e2e": [
+      {
+        "file": "apps/autocomplete-user-study-e2e/.eslintrc",
+        "ext": "",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/cypress.json",
+        "ext": ".json",
+        "mtime": 1591754312425.1907
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/src/fixtures/example.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/src/integration/app.spec.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/src/plugins/index.js",
+        "ext": ".js",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/src/support/app.po.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/src/support/commands.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/src/support/index.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/tsconfig.e2e.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "apps/autocomplete-user-study-e2e/tsconfig.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      }
+    ],
+    "autocomplete-user-study": [
+      {
+        "file": "apps/autocomplete-user-study/.eslintrc",
+        "ext": "",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/browserslist",
+        "ext": "",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/jest.config.js",
+        "ext": ".js",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/proxy.conf.json",
+        "ext": ".json",
+        "mtime": 1591997918860.2122
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/Dataset.js",
+        "ext": ".js",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/Progress.js",
+        "ext": ".js",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/TypingTask.js",
+        "ext": ".js",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/app.scss",
+        "ext": ".scss",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/app.spec.tsx",
+        "ext": ".tsx",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/app.tsx",
+        "ext": ".tsx",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/logo.svg",
+        "ext": ".svg",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/app/star.svg",
+        "ext": ".svg",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/assets/.gitkeep",
+        "ext": "",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/environments/environment.prod.ts",
+        "ext": ".ts",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/environments/environment.ts",
+        "ext": ".ts",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/favicon.ico",
+        "ext": ".ico",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/index.html",
+        "ext": ".html",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/main.tsx",
+        "ext": ".tsx",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/polyfills.ts",
+        "ext": ".ts",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/src/styles.scss",
+        "ext": ".scss",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "apps/autocomplete-user-study/tsconfig.app.json",
+        "ext": ".json",
+        "mtime": 1591754312425.1907
+      },
+      {
+        "file": "apps/autocomplete-user-study/tsconfig.json",
+        "ext": ".json",
+        "mtime": 1591754312425.1907
+      },
+      {
+        "file": "apps/autocomplete-user-study/tsconfig.spec.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "apps/autocomplete-user-study/webpack.config.js",
+        "ext": ".js",
+        "mtime": 1591999386597.7686
+      }
+    ],
+    "api-interfaces": [
+      {
+        "file": "libs/api-interfaces/.eslintrc",
+        "ext": "",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "libs/api-interfaces/README.md",
+        "ext": ".md",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "libs/api-interfaces/jest.config.js",
+        "ext": ".js",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "libs/api-interfaces/src/index.ts",
+        "ext": ".ts",
+        "mtime": 1591999386597.7686
+      },
+      {
+        "file": "libs/api-interfaces/src/lib/api-interfaces.ts",
+        "ext": ".ts",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "libs/api-interfaces/tsconfig.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "libs/api-interfaces/tsconfig.lib.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "libs/api-interfaces/tsconfig.spec.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      }
+    ],
+    "api": [
+      {
+        "file": "apps/api/.eslintrc",
+        "ext": "",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/jest.config.js",
+        "ext": ".js",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/src/app/.gitkeep",
+        "ext": "",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/src/assets/.gitkeep",
+        "ext": "",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/src/environments/environment.prod.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/src/environments/environment.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/src/main.ts",
+        "ext": ".ts",
+        "mtime": 1591999386594.4353
+      },
+      {
+        "file": "apps/api/tsconfig.app.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "apps/api/tsconfig.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      },
+      {
+        "file": "apps/api/tsconfig.spec.json",
+        "ext": ".json",
+        "mtime": 1591754312428.524
+      }
+    ]
+  }
+}
