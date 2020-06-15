@@ -1,5 +1,4 @@
 import React from 'react';
-
 import Progress from './Progress.js';
 import MonacoEditor from 'react-monaco-editor';
 
@@ -55,8 +54,8 @@ class TypingTask extends React.Component {
             });
     }
 
-    _start(setting) {
-        this._pushEvent({ 'type': 'start', setting });
+    _start() {
+        this._pushEvent({ 'type': 'start', setting: this._currentSetting() });
         this.setState({
             started: true,
         });
@@ -106,6 +105,7 @@ class TypingTask extends React.Component {
                     currentTarget: this.state.currentTarget + 1,
                     code: "",
                 });
+                this._start();
             }
         } else {
             this.setState({ error: 'Your code is too different from the target to submit.' });
@@ -152,7 +152,7 @@ class TypingTask extends React.Component {
                     { settingHeader }
                     <p>Press the button below to start the typing task. You'll be shown code on the left, and the goal is to type it on the right.</p>
                     <p>Once you're done typing, press Ctrl+Enter to submit.</p>
-                    <button onClick={() => this._start(this.state.currentSetting)}>Start</button>
+                    <button onClick={() => this._start()}>Start</button>
                 </div>
             );
         }
