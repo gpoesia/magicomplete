@@ -22,7 +22,7 @@ const dataset = JSON.parse(
 console.log('Loaded dataset with', dataset.length, 'examples.');
 
 const app = express();
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' }));
 
 app.get('/dataset', (req, res) => {
   res.json(dataset);

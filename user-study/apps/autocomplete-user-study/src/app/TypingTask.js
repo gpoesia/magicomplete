@@ -150,8 +150,12 @@ class TypingTask extends React.Component {
             return (
                 <div>
                     { settingHeader }
-                    <p>Press the button below to start the typing task. You'll be shown code on the left, and the goal is to type it on the right.</p>
+                    <p>In this study, we want to evaluate the effectiveness of different autocomplete systems.</p>
+                    <p>You'll be shown code on the left, and the goal is to type it on the right as fast as possible.</p>
                     <p>Once you're done typing, press Ctrl+Enter to submit.</p>
+                    <p>Differences in spaces (including indentation) do not matter. A small number of errors is also tolerated.</p>
+                    <p>Press the button below to start the typing task. Once you return to this screen,
+                        feel free to pause and rest before continuing.</p>
                     <button onClick={() => this._start()}>Start</button>
                 </div>
             );

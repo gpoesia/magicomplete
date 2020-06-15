@@ -27,6 +27,7 @@
   },
   "private": true,
   "dependencies": {
+    "antd": "^4.3.4",
     "body-parser": "^1.19.0",
     "document-register-element": "1.13.1",
     "express": "4.17.1",
