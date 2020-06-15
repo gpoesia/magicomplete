@@ -47,12 +47,12 @@
             {
               "file": "apps/autocomplete-user-study-e2e/cypress.json",
               "ext": ".json",
-              "mtime": 1591754312425.1907
+              "mtime": 1592000156273.4036
             },
             {
               "file": "apps/autocomplete-user-study-e2e/src/fixtures/example.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156273.4036
             },
             {
               "file": "apps/autocomplete-user-study-e2e/src/integration/app.spec.ts",
@@ -82,12 +82,12 @@
             {
               "file": "apps/autocomplete-user-study-e2e/tsconfig.e2e.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156276.7368
             },
             {
               "file": "apps/autocomplete-user-study-e2e/tsconfig.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156276.7368
             }
           ]
         }
@@ -200,7 +200,7 @@
             {
               "file": "apps/autocomplete-user-study/proxy.conf.json",
               "ext": ".json",
-              "mtime": 1591997918860.2122
+              "mtime": 1592000156276.7368
             },
             {
               "file": "apps/autocomplete-user-study/src/app/Dataset.js",
@@ -215,7 +215,7 @@
             {
               "file": "apps/autocomplete-user-study/src/app/TypingTask.js",
               "ext": ".js",
-              "mtime": 1591999386597.7686
+              "mtime": 1592242766217.0588
             },
             {
               "file": "apps/autocomplete-user-study/src/app/app.scss",
@@ -285,17 +285,17 @@
             {
               "file": "apps/autocomplete-user-study/tsconfig.app.json",
               "ext": ".json",
-              "mtime": 1591754312425.1907
+              "mtime": 1592000156276.7368
             },
             {
               "file": "apps/autocomplete-user-study/tsconfig.json",
               "ext": ".json",
-              "mtime": 1591754312425.1907
+              "mtime": 1592000156276.7368
             },
             {
               "file": "apps/autocomplete-user-study/tsconfig.spec.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156276.7368
             },
             {
               "file": "apps/autocomplete-user-study/webpack.config.js",
@@ -368,17 +368,17 @@
             {
               "file": "libs/api-interfaces/tsconfig.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156276.7368
             },
             {
               "file": "libs/api-interfaces/tsconfig.lib.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156276.7368
             },
             {
               "file": "libs/api-interfaces/tsconfig.spec.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156276.7368
             }
           ]
         }
@@ -482,22 +482,22 @@
             {
               "file": "apps/api/src/main.ts",
               "ext": ".ts",
-              "mtime": 1591999386594.4353
+              "mtime": 1592242976459.4602
             },
             {
               "file": "apps/api/tsconfig.app.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156273.4036
             },
             {
               "file": "apps/api/tsconfig.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156273.4036
             },
             {
               "file": "apps/api/tsconfig.spec.json",
               "ext": ".json",
-              "mtime": 1591754312428.524
+              "mtime": 1592000156273.4036
             }
           ]
         }
@@ -579,6 +579,14 @@
         "name": "react-monaco-editor",
         "data": {
           "version": "^0.36.0",
+          "files": []
+        }
+      },
+      "underscore": {
+        "type": "npm",
+        "name": "underscore",
+        "data": {
+          "version": "^1.10.2",
           "files": []
         }
       },
@@ -855,6 +863,11 @@
         {
           "type": "static",
           "source": "autocomplete-user-study",
+          "target": "underscore"
+        },
+        {
+          "type": "static",
+          "source": "autocomplete-user-study",
           "target": "@testing-library/react"
         },
         {
@@ -901,6 +914,7 @@
       "react": [],
       "react-dom": [],
       "react-monaco-editor": [],
+      "underscore": [],
       "@nrwl/workspace": [],
       "@types/node": [],
       "dotenv": [],
@@ -943,12 +957,12 @@
       {
         "file": "apps/autocomplete-user-study-e2e/cypress.json",
         "ext": ".json",
-        "mtime": 1591754312425.1907
+        "mtime": 1592000156273.4036
       },
       {
         "file": "apps/autocomplete-user-study-e2e/src/fixtures/example.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156273.4036
       },
       {
         "file": "apps/autocomplete-user-study-e2e/src/integration/app.spec.ts",
@@ -978,12 +992,12 @@
       {
         "file": "apps/autocomplete-user-study-e2e/tsconfig.e2e.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156276.7368
       },
       {
         "file": "apps/autocomplete-user-study-e2e/tsconfig.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156276.7368
       }
     ],
     "autocomplete-user-study": [
@@ -1005,7 +1019,7 @@
       {
         "file": "apps/autocomplete-user-study/proxy.conf.json",
         "ext": ".json",
-        "mtime": 1591997918860.2122
+        "mtime": 1592000156276.7368
       },
       {
         "file": "apps/autocomplete-user-study/src/app/Dataset.js",
@@ -1020,7 +1034,7 @@
       {
         "file": "apps/autocomplete-user-study/src/app/TypingTask.js",
         "ext": ".js",
-        "mtime": 1591999386597.7686
+        "mtime": 1592242766217.0588
       },
       {
         "file": "apps/autocomplete-user-study/src/app/app.scss",
@@ -1090,17 +1104,17 @@
       {
         "file": "apps/autocomplete-user-study/tsconfig.app.json",
         "ext": ".json",
-        "mtime": 1591754312425.1907
+        "mtime": 1592000156276.7368
       },
       {
         "file": "apps/autocomplete-user-study/tsconfig.json",
         "ext": ".json",
-        "mtime": 1591754312425.1907
+        "mtime": 1592000156276.7368
       },
       {
         "file": "apps/autocomplete-user-study/tsconfig.spec.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156276.7368
       },
       {
         "file": "apps/autocomplete-user-study/webpack.config.js",
@@ -1137,17 +1151,17 @@
       {
         "file": "libs/api-interfaces/tsconfig.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156276.7368
       },
       {
         "file": "libs/api-interfaces/tsconfig.lib.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156276.7368
       },
       {
         "file": "libs/api-interfaces/tsconfig.spec.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156276.7368
       }
     ],
     "api": [
@@ -1184,22 +1198,22 @@
       {
         "file": "apps/api/src/main.ts",
         "ext": ".ts",
-        "mtime": 1591999386594.4353
+        "mtime": 1592242976459.4602
       },
       {
         "file": "apps/api/tsconfig.app.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156273.4036
       },
       {
         "file": "apps/api/tsconfig.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156273.4036
       },
       {
         "file": "apps/api/tsconfig.spec.json",
         "ext": ".json",
-        "mtime": 1591754312428.524
+        "mtime": 1592000156273.4036
       }
     ]
   }

@@ -3,13 +3,16 @@ import * as bodyParser from 'body-parser';
 import * as Fs from 'fs';
 import mongoose from 'mongoose';
 
-mongoose.connect('mongodb://localhost:27017/autocomplete',
+const mongoPort = process.env['MONGO_PORT'] || 27017;
+
+mongoose.connect(`mongodb://localhost:{mongoPort}/autocomplete`,
                  { useNewUrlParser: true, useUnifiedTopology: true });
 
 const EventLog = mongoose.model('EventLog', {
   session: String,
   target: String,
   timestamp: Date,
+  setting: Number,
   events: Array,
 });
 
@@ -31,6 +34,7 @@ app.post('/save-events', (req, res) => {
     target: req.body.target,
     timestamp: new Date(),
     events: req.body.events,
+    setting: req.body.setting,
   });
 
   log.save().then(() => res.send('OK'));
