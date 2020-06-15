@@ -50,7 +50,7 @@ class TypingTask extends React.Component {
         fetch('/dataset')
             .then((r) => r.json())
             .then(dataset => {
-                this.setState({ dataset: dataset.slice(0, 10) });
+                this.setState({ dataset });
             });
     }
 
