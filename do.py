@@ -355,6 +355,38 @@ def train_discriminative_abbreviator(params_path, device, contexts_to_run):
         abbreviator.fit(tracker, dataset['train'])
         tracker.close()
 
+def train_clm_abbreviator(params_path, device, contexts_to_run):
+    print('Using device', device)
+    with open(params_path) as f:
+        params = json.load(f)
+
+    print('Loading dataset...')
+    with open(params['dataset']) as f:
+        dataset = json.load(f)
+
+    print('Finding abbreviation targets...')
+    targets = build_abbreviation_targets(params['n_targets'], dataset['train'])
+
+    S = cap_collisions(targets, params.get('max_collisions'))
+    contexts_to_run = contexts_to_run.split(',')
+
+    for i, ctx_value in enumerate(contexts_to_run):
+        params['clm']['context'] = ctx_value
+        clm = AutoCompleteDecoderModel(params['clm'], device)
+        ab = CLMLanguageAbbreviator(clm, S, params)
+
+        print('{}/{} Training with context = {}'.format(
+              i+1, len(contexts_to_run), ctx_value))
+
+        clm_tracker = RunTracker(ab, params)
+        clm_tracker.start()
+        ab.fit(clm_tracker, dataset)
+        clm_tracker.close()
+
+        abbrev_params = { **abbrev_params, 
+                          'comment': 'Evaluation of {}'.format(clm_tracker.run_id) }
+        evaluate_abbreviator(targets, ab, abbrev_params)
+
 def find_common_identifiers(dataset, min_length=2, max_length=50):
     frequencies = collections.Counter()
 
@@ -431,6 +463,20 @@ def build_abbreviation_targets(n_abbreviations, dataset):
             break
     return targets
 
+def cap_collisions(targets, max_collisions=None):
+    if max_collisions is None:
+        return targes
+
+    cnt = collections.Counter()
+    ts = []
+
+    for t in targets:
+        if cnt[t[0]] < max_collisions:
+            ts.append(t)
+            cnt[t[0]] += 1
+
+    return ts
+
 def run_abbreviator_experiment(params_path, device):
     with open(params_path) as f:
         params = json.load(f)
@@ -480,6 +526,9 @@ def run_abbreviator_experiment(params_path, device):
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
 
+    evaluate_abbreviator(targets, abbreviator, params)
+
+def evaluate_abbreviator(targets, abbreviator, params):
     p = Progress(len(targets), print_every=1)
     tracker = RunTracker(abbreviator, params)
     tracker.extend_list('abbreviation_targets', targets)
@@ -549,6 +598,9 @@ if __name__ == '__main__':
                         action='store_const', const=True, default=False)
     parser.add_argument('--train-dlm',
                         help='Train Discriminative Language Model.',
+                        action='store_const', const=True, default=False)
+    parser.add_argument('--train-clm',
+                        help='Train Conditional Language Model.',
                         action='store_const', const=True, default=False)
     parser.add_argument('--train-dla',
                         help='Train Discriminative Language Abbreviator.',
@@ -621,6 +673,12 @@ if __name__ == '__main__':
         )
     elif args.train_dla:
         train_discriminative_abbreviator(
+                args.params,
+                torch.device(args.device),
+                args.contexts,
+        )
+    elif args.train_clm:
+        train_clm_abbreviator(
                 args.params,
                 torch.device(args.device),
                 args.contexts,

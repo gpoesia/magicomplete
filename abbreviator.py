@@ -10,6 +10,7 @@ import collections
 import json
 from models import load_from_run
 from language_model import RNNLanguageModel, DiscriminativeLanguageModel
+from decoder import AutoCompleteDecoderModel
 import math
 import time
 
@@ -336,6 +337,220 @@ class LMRLanguageAbbreviator:
 
         return abbreviator
 
+class CLMLanguageAbbreviator:
+    def __init__(self, clm, abbreviation_targets, params={}):
+        self.params = params
+        self.clm = clm.clone()
+        self.abbreviation_targets = abbreviation_targets
+        self.abbreviation_targets_set = set(abbreviation_targets)
+        self.inverted_abbreviations = collections.defaultdict(list)
+        self.evaluation_examples = []
+        self.rehearsal_examples = []
+
+        for t in abbreviation_targets:
+            self.inverted_abbreviations[t[0]].append(t)
+
+        self._load_params()
+
+    def _load_params(self):
+        self.description = self.params.get('description') or 'CLM'
+        self.val_examples = self.params.get('val_examples') or 512
+        self.batch_size = self.params.get('batch_size') or 128
+        self.beam_size = self.params.get('beam_size') or 32
+
+    def list_candidate_expansions(self, token):
+        candidates = [token]
+        for t in self.abbreviation_targets:
+            if t != token and is_subsequence(token, t):
+                candidates.append(t)
+        return candidates
+
+    def encode_tokens(self, tokens):
+        return [(t[0] if t in self.abbreviation_targets_set else t) for t in tokens]
+
+    def encode(self, batch):
+        encoded_l = [{ **r,
+                       'l': ''.join(self.encode_tokens(split_at_identifier_boundaries(r['l']))) }
+                     for r in batch]
+
+        return encoded_l, None
+
+    def compute_accuracy(self, examples):
+        if len(examples) == 0:
+            return 1.0
+        queries = [{ **ex,
+                     'l': self.random_abbreviate(ex['l'], self.abbreviation_targets) }
+                     for ex in examples]
+        predictions = self.beam_search(queries, beam_size=2)
+        correct = [r['l'] == p[0] for r, p in zip(examples, predictions)]
+        return sum(correct) / len(examples)
+ 
+    def beam_search(self, queries, beam_size=None):
+        if len(queries) == 0:
+            return []
+
+        with torch.no_grad():
+            beam_size = beam_size or self.beam_size
+            tokens = [split_at_identifier_boundaries(r['l']) for r in queries]
+            candidates = [[()] for _ in queries]
+
+            for t_i in range(max(len(t) for t in tokens)):
+                need_reranking = []
+                reranking_list = []
+
+                for i in range(len(queries)):
+                    if t_i < len(tokens[i]):
+                        t = tokens[i][t_i]
+                        expansions = self.list_candidate_expansions(t)
+                        next_candidates = []
+
+                        for c in candidates[i]:
+                            for e in expansions:
+                                next_candidates.append(c + (e,))
+
+                        candidates[i] = next_candidates
+
+                    if len(candidates[i]) > beam_size or \
+                            (len(candidates[i]) > 1 and t_i + 1 == len(tokens[i])):
+                        need_reranking.append((
+                            i, 
+                            len(reranking_list),
+                            len(reranking_list) + len(candidates[i])))
+                        reranking_list.extend({ 'l': ''.join(c), 
+                                                's': queries[i]['l'],
+                                                'p': queries[i].get('p', []),
+                                                'i': queries[i]['i'],
+                                                'c': queries[i]['c'] }
+                                                for c in candidates[i])
+
+                if len(need_reranking) > 0:
+                    scores = []
+                    for batch in batched(reranking_list, self.batch_size):
+                        batch_l, batch_s = zip(*[(r['l'], r['s']) for r in batch])
+                        context = self.clm.encode_context(batch)
+                        lens = torch.tensor([len(l) + 1 for l in batch_l], device=self.clm.device)
+
+                        scores.extend(list(-self.clm(batch_s, context, batch_l,
+                                                     return_loss=True).sum(dim=1) / lens))
+
+                    for i, lo, hi in need_reranking:
+                        candidates_with_scores = list(zip(reranking_list[lo:hi],
+                                                          scores[lo:hi]))
+                        candidates_with_scores.sort(key=lambda cs: cs[1], reverse=True)
+                        candidates[i] = [split_at_identifier_boundaries(c['l'])
+                                         for c, _ in candidates_with_scores][:beam_size]
+
+            return [[''.join(c) for c in candidates_i] for candidates_i in candidates]
+
+    def decode(self, batch_encoded, ctx=None):
+        return [r[0] for r in self.beam_search(batch_encoded)]
+
+    def name(self):
+        return ('CLMLanguageAbbreviator({}, min_val_acc={:.2f})'
+                .format(self.description,
+                        self.minimum_validation_accuracy))
+
+    def find_token(self, s, t):
+        return t in split_at_identifier_boundaries(s)
+
+    def find_abbreviation(self, string):
+        return (string[0]
+                if string in self.abbreviation_targets_set
+                else string)
+
+    def dump(self, path):
+        torch.save({
+            'params': self.params,
+            'abbreviation_targets': self.abbreviation_targets,
+            'clm': self.clm.state_dict(),
+            }, path)
+
+    @staticmethod
+    def load(path, device):
+        m = torch.load(path, map_location=device)
+        params = m['params']
+        clm = AutoCompleteDecoderModel(params.get('clm', {}), device)
+        clm.load_state_dict(m['clm'])
+        abbreviator = CLMLanguageAbbreviator(
+                clm, m['abbreviation_targets'], params)
+        return abbreviator
+
+    def abbreviate(self, line, targets_set):
+        tokens = split_at_identifier_boundaries(line)
+        abbrev_tokens = []
+
+        for t in tokens:
+            if t in targets_set:
+                abbrev_tokens.append(t[0])
+            else:
+                abbrev_tokens.append(t)
+
+        return ''.join(abbrev_tokens)
+
+    def fit(self, tracker, dataset):
+        learning_rate = self.params.get('learning_rate', 1e-3)
+        batch_size = self.params.get('batch_size') or 32
+        init_scale = self.params.get('init_scale') or 0.1
+        epochs = self.params.get('epochs', 1)
+        log_every = self.params.get('log_every') or 100
+        validate_every = self.params.get('validate_every') or 1000
+        val_examples = self.params.get('val_examples') or 1000
+        lr_gamma = self.params.get('lr_gamma') or 1.0
+
+        training_set, val_set = dataset['train'], dataset['dev']
+        batches_per_epoch = math.ceil(len(training_set) * epochs / batch_size)
+        total_batches = epochs * batches_per_epoch
+        val_acc = 0
+
+        random.shuffle(val_set)
+
+        for p in self.clm.parameters():
+            if len(p.shape) >= 2:
+                torch.nn.init.xavier_uniform_(p)
+            else:
+                torch.nn.init.uniform_(p, -init_scale, init_scale)
+
+        optimizer = torch.optim.Adam(self.clm.parameters(),
+                                     lr=learning_rate)
+        p = Progress(total_iterations=total_batches)
+
+        for e in range(epochs):
+            random.shuffle(training_set)
+
+            for i, batch in enumerate(batched(training_set, batch_size)):
+                optimizer.zero_grad()
+                batch_l = [r['l'] for r in batch]
+                batch_enc = [r['l'] for r in self.encode(batch)[0]]
+                lengths = torch.tensor([len(l) + 1 for l in batch_l],
+                                       device=self.clm.device)
+                context = self.clm.encode_context(batch)
+                loss = (self.clm(batch_enc, context, batch_l, return_loss=True)
+                        .sum(dim=1) / lengths).mean()
+                loss.backward()
+                optimizer.step()
+
+                if p.tick() % log_every == 0:
+                    print('Epoch {} batch {}: loss = {:.3f}, {}'
+                          .format(e, i, loss.item(), p.format()))
+
+                tracker.step()
+                tracker.add_scalar('train/loss', loss.item())
+
+                if tracker.current_step % validate_every == 0:
+                    last_val, val_acc = val_acc, self.validate(val_set[:val_examples], tracker)
+                    if val_acc < last_val:
+                        pass # TODO: Remove some items from S based on confusion matrix?
+
+            tracker.checkpoint()
+        self.validate(val_set[:val_examples], tracker)
+
+    def validate(self, examples, tracker):
+        val_acc = self.compute_accuracy(examples)
+        tracker.add_scalar('val/acc', val_acc)
+        print('Validation accuracy: {:.2f}%'.format(100*val_acc))
+        tracker.checkpoint()
+        return val_acc
+
 class DiscriminativeLanguageAbbreviator:
     def __init__(self, dlm, abbreviation_targets, params={}, training_set=[]):
         self.params = params
@@ -384,6 +599,15 @@ class DiscriminativeLanguageAbbreviator:
 
         return encoded_l, None
 
+    def compute_accuracy(self, Xy):
+        examples = [x for x, y in Xy]
+        queries = [{ **ex,
+                     'l': self.abbreviate(ex['l'], self.abbreviation_targets) }
+                     for ex in examples]
+        predictions = self.beam_search(queries, beam_size=2)
+        correct = [r['l'] == p[0] for r, p in zip(examples, predictions)]
+        return sum(correct) / len(examples)
+ 
     def beam_search(self, queries, beam_size=None):
         with torch.no_grad():
             beam_size = beam_size or self.beam_size
@@ -525,8 +749,7 @@ class DiscriminativeLanguageAbbreviator:
 
         for t in tokens:
             if t in targets_set:
-                abbrev_len = 1 + math.floor(random.expovariate(self.lambd))
-                abbrev_tokens.append(t[:abbrev_len])
+                abbrev_tokens.append(t[:1])
             else:
                 abbrev_tokens.append(t)
 
@@ -537,7 +760,7 @@ class DiscriminativeLanguageAbbreviator:
         examples = []
         examples_used, correct = 0, 0
 
-        for ex in random.sample(training_set, 2*N):
+        for ex in random.sample(training_set, min(2*N, len(training_set))):
             abbrev = self.random_abbreviate(ex['l'], self.abbreviation_targets)
             if abbrev != ex['l']:
                 examples.append((ex, abbrev))
@@ -578,6 +801,7 @@ class DiscriminativeLanguageAbbreviator:
         accumulate_examples = self.params.get('accumulate_examples', True)
         epoch_size_multiplier = self.params.get('epoch_size_multiplier', 1.0)
         use_prefixes = self.params.get('use_prefixes', True)
+        minimum_epoch_accuracy = self.params.get('minimum_epoch_accuracy', 0.0)
 
         active_training_set = []
 
@@ -609,10 +833,10 @@ class DiscriminativeLanguageAbbreviator:
             if e == epochs:
                 break
 
-            for era in range(eras):
-                era_training_set = (active_training_set +
-                                    previous_examples)
+            era_training_set = (active_training_set + previous_examples)
+            era = 0
 
+            while era < eras or acc < minimum_epoch_accuracy:
                 random.shuffle(era_training_set)
 
                 for i, batch in enumerate(batched(era_training_set, batch_size)):
@@ -633,6 +857,18 @@ class DiscriminativeLanguageAbbreviator:
 
                     tracker.step()
                     tracker.add_scalar('train/loss', loss.item())
+
+                if minimum_epoch_accuracy > 0:
+                    examples, acc = self.generate_contrastive_examples(
+                            epoch_size,
+                            [x for x, y in active_training_set if y == 1],
+                            use_prefixes
+                            )
+                    era_training_set = examples + previous_examples
+                    print('Accuracy after era {}: {:.2f}%'.format(era, 100*acc))
+                    tracker.add_scalar('train/epoch_acc', acc)
+
+                era += 1
 
             if accumulate_examples:
                 previous_examples.extend(active_training_set)

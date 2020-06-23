@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from util import broadcast_dot
-from alphabet import AsciiEmbeddedEncoding
+from alphabet import AsciiEmbeddedEncoding, BytePairEncoding
 from contextual_lstm import ContextualLSTMCell
 from cnn_set_embedding import CNNSetEmbedding
 from context import *
@@ -19,36 +19,27 @@ class AutoCompleteDecoderModel(nn.Module):
         max_test_length = params.get('max_test_length', 200)
         dropout_rate = params.get('dropout_rate', 0.2)
         context = Context.parse(params.get('context', 'NONE'))
-        context_algorithm = ContextAlgorithm.parse(params.get('context_algorithm', 'NONE'))
-        context_embedding_size = params.get('context_embedding_size', 50)
+        context_size = params.get('context_size', 128)
         context_rank = params.get('context_rank', 50)
 
-        self.alphabet = alphabet = AsciiEmbeddedEncoding(device)
+        alphabet_params = params.get('alphabet', {})
+        if alphabet_params.get('type', 'CHAR') == 'CHAR':
+            self.alphabet = alphabet = AsciiEmbeddedEncoding(device)
+        else:
+            self.alphabet = alphabet = BytePairEncoding(alphabet_params, device)
 
         self.hidden_size = hidden_size
         self.encoder_lstm = nn.LSTM(alphabet.embedding_size(), hidden_size,
                                     batch_first=True, bidirectional=True)
 
         self.context = context
-        self.context_algorithm = context_algorithm
 
-        if context_algorithm != ContextAlgorithm.FACTOR_CELL:
-            self.decoder_lstm = nn.LSTMCell(
-                hidden_size + alphabet.embedding_size() + (
-                    context_embedding_size * context.count()
-                    if context_algorithm in (ContextAlgorithm.CONCAT_CELL, ContextAlgorithm.CNN)
-                    else 0
-                    ),
+        self.decoder_lstm = nn.LSTMCell(
+                alphabet.embedding_size() + context_size,
                 hidden_size)
-        else:
-            self.decoder_lstm = ContextualLSTMCell(
-                    hidden_size + alphabet.embedding_size(),
-                    hidden_size,
-                    context.count() * context_embedding_size,
-                    context_rank)
 
-        if context_algorithm == ContextAlgorithm.CNN:
-            self.context_cnn = CNNSetEmbedding(device, context_embedding_size)
+        if context.count():
+            self.context_emb = ContextEmbedding(self.alphabet, params)
 
         self.h_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
         self.c_proj = nn.Linear(2*hidden_size, hidden_size, bias=False)
@@ -111,12 +102,7 @@ class AutoCompleteDecoderModel(nn.Module):
         decoded_strings = [[] for _ in range(B)]
 
         i = 0
-        next_input = torch.cat([
-            ( alphabet.get_start_token().repeat(B, 1)),
-            torch.zeros((B, self.hidden_size),
-                        dtype=torch.float,
-                        device= alphabet.device)
-        ], dim=1)
+        next_input = alphabet.get_start_token().repeat(B, 1)
 
         last_output = None
         all_finished = False
@@ -125,25 +111,18 @@ class AutoCompleteDecoderModel(nn.Module):
 
         # If using context embeddings, compute context weights for the batch.
         using_context = (self.context != Context.NONE)
-        factor_cell = self.context_algorithm == ContextAlgorithm.FACTOR_CELL
-        concat_cell = self.context_algorithm == ContextAlgorithm.CONCAT_CELL
-        cnn_context = self.context_algorithm == ContextAlgorithm.CNN
 
         if using_context:
             if context is None:
                 raise ValueError('Expected a context matrix.')
-            if factor_cell:
-                context_w = self.decoder_lstm.compute_context_weights(context)
 
         while not all_finished:
             if not using_context:
                 decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state)
-            elif concat_cell or cnn_context:
+            else:
                 decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(
                         torch.cat([next_input, context], dim=1),
                         decoder_state)
-            else:
-                decoder_state = (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state, context_w)
 
             # decoder_hidden: (B, H)
             # encoder_hidden_states: (B, L, H)
@@ -176,7 +155,7 @@ class AutoCompleteDecoderModel(nn.Module):
 
             if is_training:
                 predictions.append(last_output)
-                next_input = torch.cat([E_emb[:, i + 1], timestep_out], dim=1)
+                next_input = E_emb[:, i + 1]
             else:
                 # At test time, set next input to last predicted character
                 # (greedy decoding).
@@ -214,60 +193,6 @@ class AutoCompleteDecoderModel(nn.Module):
         else:
             return [''.join(s) for s in decoded_strings]
 
-
-    def beam_search(self, compressed_string, alphabet, beam_size=2, max_depth=3):
-        # FIXME(gpoesia): Optionally take context in beam search as well.
-
-        B = 1
-        C = alphabet.encode_batch([compressed_string])
-        C_indices = alphabet.encode_batch_indices([compressed_string])
-        encoder_hidden_states, (enc_hn, enc_cn) = self.encoder_lstm(C)
-        decoder_state = (self.h_proj(enc_hn.transpose(0, 1).reshape(B, -1)),
-                         self.c_proj(enc_cn.transpose(0, 1).reshape(B, -1)))
-        finished = torch.zeros(B)
-        start_token = alphabet.index_to_char(alphabet.START_INDEX)
-        end_token = alphabet.index_to_char(alphabet.END_INDEX)
-        #top_k : [(score, string, last_hidden_state, last_cell_state)]
-        top_k = [(0.0,
-                  start_token,
-                  *decoder_state)]
-        encoder_hidden_states_proj = self.attention_proj(encoder_hidden_states)
-        depth = 0
-        while depth < max_depth and (len(list(filter(lambda x:x[1][-1] == end_token, top_k))) < beam_size):
-            next_top_k = list(filter(lambda x:x[1][-1] == end_token, top_k))
-            # next_input is embedding of the character going in next
-            for last_decode in filter(lambda x: x[1][-1] != end_token, top_k):
-                prev_score, prev_string, prev_hidden_state, prev_cell_state = last_decode
-                last_char = prev_string[-1]
-                next_input = torch.cat((
-                    alphabet.encode(last_char)[1].unsqueeze(dim=0),
-                    torch.zeros((1,self.hidden_size), dtype=torch.float, device=alphabet.device)), dim=1)
-                decoder_state = (prev_hidden_state, prev_cell_state)
-                (decoder_hidden, decoder_cell) = self.decoder_lstm(next_input, decoder_state)
-                attention_scores = torch.squeeze(torch.bmm(encoder_hidden_states_proj,
-                                                           torch.unsqueeze(decoder_hidden, -1)
-                                                           ), 2)
-                attention_d = F.softmax(attention_scores, dim=1)
-                attention_result = torch.squeeze(torch.bmm(torch.unsqueeze(attention_d, 1),
-                                                 encoder_hidden_states), dim=1)
-                U = torch.cat([decoder_hidden, attention_result], dim=1)
-                V = self.output_proj(U)
-                timestep_out = self.dropout(torch.tanh(V))
-                last_output = F.softmax(self.vocab_proj(timestep_out), dim=1)
-                predictions, indices = last_output.topk(beam_size, dim=1)
-                probs = predictions[0]
-                for i in range(len(probs)):
-                    next_char = alphabet.index_to_char(indices[0][i])
-                    next_top_k.append(
-                        (prev_score + math.log(probs[i]),
-                         prev_string+next_char,
-                         decoder_hidden,
-                         decoder_cell))
-            top_k = sorted(next_top_k, key=lambda x:-x[0]/len(x[1]))[:beam_size]
-            depth += 1
-        #return list(map(lambda x:x[1], top_k))
-        return top_k
-
     def clone(self):
         c = AutoCompleteDecoderModel(self.params, self.device)
         c.load_state_dict(self.state_dict())
@@ -287,21 +212,7 @@ class AutoCompleteDecoderModel(nn.Module):
         decoder.eval()
         return decoder
 
-    def compute_context(self, batch_imports, batch_ids, set_embedding=None):
-        if self.context:
-            context_tensors = []
-
-            if self.context & Context.IMPORTS:
-                context_tensors.append(
-                    self.context_cnn(batch_imports)
-                    if self.context_algorithm == ContextAlgorithm.CNN
-                    else set_embedding.embed(batch_imports))
-
-            if self.context & Context.IDENTIFIERS:
-                context_tensors.append(
-                    self.context_cnn(batch_ids)
-                    if self.context_algorithm == ContextAlgorithm.CNN
-                    else set_embedding.embed(batch_ids))
-
-            return torch.cat(context_tensors, dim=1)
+    def encode_context(self, batch):
+        if self.context.count():
+            return self.context_emb(batch)
         return None

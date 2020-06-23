@@ -357,8 +357,7 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
         return self.ascii_embedding(indices)
 
     def encode_indices(self, s, partial=False):
-
-        b = s.encode('ascii')
+        b = s.encode('ascii', 'replace')
         return torch.tensor([self.START_INDEX] +
                              list(b) +
                             ([] if partial else [self.END_INDEX]),
@@ -403,8 +402,8 @@ class AsciiEmbeddedEncoding(AlphabetEncoding, nn.Module):
                                       dtype=torch.long, device=self.device)
         return torch.stack(
                 [torch.cat([self.encode_indices(s, partial),
-                            padding_tensor.repeat(max_length - len(s))])
-                 for s in batch])
+                    padding_tensor.repeat(max_length - len(s))])
+                    for s in batch])
 
     def char_to_index(self, c):
         return ord(c)

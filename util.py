@@ -4,6 +4,7 @@ import datetime
 import time
 import numpy as np
 import random
+import collections
 
 class Progress:
     def __init__(self, total_iterations=None, timeout=None, print_every=None):
@@ -142,3 +143,18 @@ def is_subsequence(t1, t2):
         i2 += 1
 
     return i1 == len(t1)
+
+def compute_confusion_matrix(examples, targets):
+    cnt = collections.Counter()
+
+    targets_set = set(targets)
+    for t in targets:
+        targets_set.add(t[0])
+
+    for pred, y in examples:
+        for t1, t2 in zip(split_at_identifier_boundaries(pred),
+                          split_at_identifier_boundaries(y)):
+            if t2 in targets_set:
+                cnt[(t2, t1)] += 1
+
+    return cnt
