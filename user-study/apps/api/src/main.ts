@@ -2,8 +2,10 @@ import * as express from 'express';
 import * as bodyParser from 'body-parser';
 import * as Fs from 'fs';
 import mongoose from 'mongoose';
+import proxy from 'express-http-proxy';
 
 const mongoPort = process.env['MONGO_PORT'] || 27017;
+const magicompletePort = process.env['MAGICOMPLETE_PORT'] || 5000;
 
 mongoose.connect(`mongodb://localhost:{mongoPort}/autocomplete`,
                  { useNewUrlParser: true, useUnifiedTopology: true });
@@ -39,6 +41,9 @@ app.post('/save-events', (req, res) => {
 
   log.save().then(() => res.send('OK'));
 });
+
+app.get('/keywords', proxy(`localhost:${magicompletePort}/keywords`));
+app.get('/complete', proxy(`localhost:${magicompletePort}/complete`));
 
 const port = process.env.port || 3333;
 const server = app.listen(port, () => {
