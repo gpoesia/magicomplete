@@ -12,6 +12,8 @@ const trim = (l) => {
     return [l.substr(0, l.length - tl.length), tl];
 }
 
+const HIGHLIGHT_CLASS = 'magicompleteHighlight';
+
 export default class CodeEditor extends React.Component {
     constructor() {
         super();
@@ -71,9 +73,7 @@ export default class CodeEditor extends React.Component {
     updateHighlighting(e, position) {
         const line = position.lineNumber;
         const model = e.getModel();
-        for (let i = Math.max(1, line - this.contextSize); i <= line; i++) {
-            updateLineDecorations(i, model, this.keywords);
-        }
+        updateLineDecorations(line, model, this.keywords);
     }
 
     componentDidMount() {
@@ -168,7 +168,7 @@ function splitAtIdentifierBoundaries(s) {
 }
 
 function updateLineDecorations(line, model, strings) {  
-    let decorations = model.getLineDecorations(line).map(d => d.id);
+    let decorations = model.getLineDecorations(line);
     let newDecorations = [];
 
     const tokens = splitAtIdentifierBoundaries(
@@ -179,11 +179,15 @@ function updateLineDecorations(line, model, strings) {
         if (strings.has(t)) {
             newDecorations.push({
                 range: new monaco.Range(line, column + 1, line, column + t.length + 1),
-                options: { inlineClassName: 'magicompleteHighlight' }},
+                options: { inlineClassName: HIGHLIGHT_CLASS }},
             );
         }
         column += t.length;
     });
 
-    model.deltaDecorations(decorations, newDecorations);
+    model.deltaDecorations(
+        decorations
+            .filter(d => d.options.inlineClassName == HIGHLIGHT_CLASS)
+            .map(d => d.id),
+        newDecorations);
 }

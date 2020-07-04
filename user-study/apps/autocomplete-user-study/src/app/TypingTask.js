@@ -27,6 +27,7 @@ class TypingTask extends React.Component {
             currentSetting: 0,
             currentTarget: 0,
             instructionsRead: false,
+            taskBegin: new Date(),
         };
 
         this.session = Math.random().toString();
@@ -40,19 +41,26 @@ class TypingTask extends React.Component {
         fetch('/dataset')
             .then((r) => r.json())
             .then(dataset => {
+                dataset = dataset.slice(0, 1);
                 this.setState({ dataset });
             });
+        this.updateInterval = window.setInterval(() => this.forceUpdate(), 500);
+    }
+
+    componentWillUnmount() {
+        clearInterval(this.updateInterval);
     }
 
     _start() {
         this._pushEvent({ 'type': 'start', setting: this._currentSetting() });
         this.setState({
             started: true,
+            taskBegin: new Date(),
         });
     }
 
     saveEvents(target) {
-        fetch('/save-events', {
+        return fetch('/save-events', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -72,22 +80,22 @@ class TypingTask extends React.Component {
 
         if (computeErrors(code, target) <= MAX_ERRORS) {
             this._pushEvent({ 'type': 'end' });
-            this.saveEvents(target);
-
-            // After the last code snippet, move to the next setting.
-            if (this.state.currentTarget + 1 == this.state.dataset.length) {
-                this.setState({
-                    currentTarget: 0,
-                    currentSetting: this.state.currentSetting + 1,
-                    started: false,
-                });
-            } else {
-                // Otherwise, just move to the next snippet.
-                this.setState({
-                    currentTarget: this.state.currentTarget + 1,
-                });
-                this._start();
-            }
+            this.saveEvents(target).then(() => {
+                // After the last code snippet, move to the next setting.
+                if (this.state.currentTarget + 1 == this.state.dataset.length) {
+                    this.setState({
+                        currentTarget: 0,
+                        currentSetting: this.state.currentSetting + 1,
+                        started: false,
+                    });
+                } else {
+                    // Otherwise, just move to the next snippet.
+                    this.setState({
+                        currentTarget: this.state.currentTarget + 1,
+                    });
+                    this._start();
+                }
+            });
             return true;
         } else {
             this.setState({ error: 'Your code is too different from the target to submit.' });
@@ -206,10 +214,13 @@ class TypingTask extends React.Component {
             <div>
                 { settingHeader }
                 <Progress current={this.state.currentTarget} total={this.state.dataset.length} />
-                
+
                 <p>Type the code on the right. Press Ctrl+S when you're done.</p>
                 { settingQuickInstructions }
                 <p className="TypingTask-error"> { this.state.error || ' ' } </p>
+                <p className="task-timer">
+                    {((new Date() - this.state.taskBegin) / 1000).toFixed(0)}s
+                </p>
 
                 <div className="TypingTask-columns">
                     <div className="TypingTask-code-container TypingTask-column">
