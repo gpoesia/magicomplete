@@ -81,4 +81,4 @@ class ContextEmbedding(nn.Module):
         return ctx
 
 def pad(l, n):
-    return [''] * (n - len(l)) + l[-n:]
+    return ['import sys'] * (n - len(l)) + l[-n:]

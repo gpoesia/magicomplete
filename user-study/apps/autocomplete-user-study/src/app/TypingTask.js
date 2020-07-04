@@ -41,7 +41,7 @@ class TypingTask extends React.Component {
         fetch('/dataset')
             .then((r) => r.json())
             .then(dataset => {
-                dataset = dataset.slice(0, 1);
+                dataset = dataset.slice(0, 3);
                 this.setState({ dataset });
             });
         this.updateInterval = window.setInterval(() => this.forceUpdate(), 500);
@@ -133,19 +133,29 @@ class TypingTask extends React.Component {
 
         const settingInstructions = {
             [AutocompleteSetting.NONE]:
-                <p>In this setting, the editor's autocomplete feature is disabled</p>,
+                <p>
+                    In this setting, the editor's autocomplete feature is disabled.
+                    The editor still has other common code editing features, such as
+                    automatic indentation and syntax highlighting.
+                </p>,
             [AutocompleteSetting.DEFAULT]: 
                 <p>
                     In this setting, you'll use VSCode's default autocomplete feature.
-                    It suggests completions as you type, and you can press Enter to accept them.
+                    It suggests completions as you type, and you can use the arrow keys to
+                    choose a suggestion, press Enter to accept the currently highlighted suggestion,
+                    or Esc to close the list of suggestions. VSCode will suggest any previously
+                    used identifier that contains the characters that you have typed
+                    so far in the same order, even if some are missing. For example, if you type 'ap'
+                    it might suggest 'append'. The same will happen if you type 'apd', but not 'adp'.
                 </p>,
             [AutocompleteSetting.PRAGMATIC]:
                 <p>
-                    In this setting, a set of common Python keywords and identifiers such as 'self', 'import'
+                    In this setting, a set of common Python keywords and identifiers (such as 'self', 'import'
                     and 'append') can be abbreviated to just its initial letter.
                     You can type an entire line using abbreviations, and use Ctrl+Enter (or Cmd+Enter on MacOS)
                     to expand the abbreviations you used. For example, typing the line 'i sys' and pressing
                     Ctrl+Enter will replace the line by 'import sys'.
+                    Similarly, typing 'd _(s)' and pressing Ctrl+Enter will expand to 'def __init__(self)'.
                     The keywords that can be abbreviated in this manner will be highlighted in yellow when you
                     type them, so that you know you can abbreviate them the next time.
                 </p>
