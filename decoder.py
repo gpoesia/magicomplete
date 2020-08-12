@@ -20,7 +20,6 @@ class AutoCompleteDecoderModel(nn.Module):
         dropout_rate = params.get('dropout_rate', 0.2)
         context = Context.parse(params.get('context', 'NONE'))
         context_size = params.get('context_size', 128)
-        context_rank = params.get('context_rank', 50)
 
         alphabet_params = params.get('alphabet', {})
         if alphabet_params.get('type', 'CHAR') == 'CHAR':
@@ -35,7 +34,9 @@ class AutoCompleteDecoderModel(nn.Module):
         self.context = context
 
         self.decoder_lstm = nn.LSTMCell(
-                alphabet.embedding_size() + context_size,
+                alphabet.embedding_size() + (context_size
+                                             if context != Context.NONE
+                                             else 0),
                 hidden_size)
 
         if context.count():

@@ -15,6 +15,7 @@ parser.add_argument('-M', '--max-length', help='Maximum line length.', type=int,
 parser.add_argument('-N', '--max-name-length', help='Maximum name of a name in context or imports.', type=int, default=20)
 parser.add_argument('-e', '--examples-from-file', help='Maximum number of examples to extract from a single file.', type=int, default=20)
 parser.add_argument('-n', '--n-files', help='Number of files to use.', type=int, default=1000)
+parser.add_argument('-l', '--language', help='Language to build the dataset for.', default='Python')
 parser.add_argument('-o', '--output', help='Output file.', default='lines.json')
 
 opt = parser.parse_args()
@@ -104,7 +105,7 @@ def build_dataset(files, progress):
 if __name__ == '__main__':
     with open(opt.files_dataset) as f:
         print('Loading', opt.files_dataset, '...')
-        files_dataset = json.load(f)['Python']
+        files_dataset = json.load(f)[opt.language]
         files_count = sum(map(len, files_dataset.values()))
         n = min(files_count, opt.n_files)
         print(files_count, 'files in the dataset. Using', n)

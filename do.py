@@ -383,9 +383,9 @@ def train_clm_abbreviator(params_path, device, contexts_to_run):
         ab.fit(clm_tracker, dataset)
         clm_tracker.close()
 
-        abbrev_params = { **abbrev_params, 
+        abbrev_params = { **params, 
                           'comment': 'Evaluation of {}'.format(clm_tracker.run_id) }
-        evaluate_abbreviator(targets, ab, abbrev_params)
+        evaluate_abbreviator(dataset, targets, ab, abbrev_params)
 
 def find_common_identifiers(dataset, min_length=2, max_length=50):
     frequencies = collections.Counter()
@@ -496,7 +496,6 @@ def run_abbreviator_experiment(params_path, device):
         set_embedding = None
 
     results = {}
-    evaluator = AbbreviatorEvaluator(targets, ds['dev'])
 
     if params['abbreviator']['type'] == 'LMR':
         lm = load_from_run(RNNLanguageModel, params['abbreviator']['lm'], device)
@@ -526,9 +525,10 @@ def run_abbreviator_experiment(params_path, device):
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
 
-    evaluate_abbreviator(targets, abbreviator, params)
+    evaluate_abbreviator(ds, targets, abbreviator, params)
 
-def evaluate_abbreviator(targets, abbreviator, params):
+def evaluate_abbreviator(dataset, targets, abbreviator, params):
+    evaluator = AbbreviatorEvaluator(targets, dataset['dev'])
     p = Progress(len(targets), print_every=1)
     tracker = RunTracker(abbreviator, params)
     tracker.extend_list('abbreviation_targets', targets)

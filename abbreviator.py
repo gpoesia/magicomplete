@@ -379,7 +379,7 @@ class CLMLanguageAbbreviator:
         if len(examples) == 0:
             return 1.0
         queries = [{ **ex,
-                     'l': self.random_abbreviate(ex['l'], self.abbreviation_targets) }
+                     'l': self.abbreviate(ex['l'], self.abbreviation_targets) }
                      for ex in examples]
         predictions = self.beam_search(queries, beam_size=2)
         correct = [r['l'] == p[0] for r, p in zip(examples, predictions)]
@@ -446,9 +446,8 @@ class CLMLanguageAbbreviator:
         return [r[0] for r in self.beam_search(batch_encoded)]
 
     def name(self):
-        return ('CLMLanguageAbbreviator({}, min_val_acc={:.2f})'
-                .format(self.description,
-                        self.minimum_validation_accuracy))
+        return ('CLMLanguageAbbreviator({}, pre-trained'
+                .format(self.description))
 
     def find_token(self, s, t):
         return t in split_at_identifier_boundaries(s)
