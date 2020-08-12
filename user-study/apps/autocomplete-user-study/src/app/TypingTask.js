@@ -1,7 +1,9 @@
 import React from 'react';
 import Progress from './Progress.js';
+import Consent from './Consent';
 import MonacoEditor from 'react-monaco-editor';
 import CodeEditor, { AutocompleteSetting } from './CodeEditor';
+import YouTube from 'react-youtube';
 
 import leven from 'leven';
 import _ from 'underscore';
@@ -26,7 +28,7 @@ class TypingTask extends React.Component {
             started: false,
             currentSetting: 0,
             currentTarget: 0,
-            instructionsRead: false,
+            userConsented: false,
             taskBegin: new Date(),
         };
 
@@ -41,7 +43,6 @@ class TypingTask extends React.Component {
         fetch('/dataset')
             .then((r) => r.json())
             .then(dataset => {
-                dataset = dataset.slice(0, 3);
                 this.setState({ dataset });
             });
         this.updateInterval = window.setInterval(() => this.forceUpdate(), 500);
@@ -115,12 +116,24 @@ class TypingTask extends React.Component {
     }
 
     render() {
+        if (!this.state.userConsented) {
+            return <Consent start={() => this.setState({ userConsented: true })} />;
+        }
+
         if (!this.state.dataset) {
             return <p>Loading dataset...</p>
         }
 
-        if (this.state.currentSetting == NUMBER_OF_SETTINGS) {
-            return <p>Thank you for participating! You can now close this page.</p>
+        if (this.state.currentSetting < NUMBER_OF_SETTINGS) {
+            return (
+                <p>
+                    Thank you for participating!
+                    Finally, please fill out
+                    <a href="https://forms.gle/XCvFzKt8J7HMek3W9">
+                        this one-minute survey about your experience.
+                    </a>
+                </p>
+            );
         }
 
         const enableCompletion = (this.settingsOrder[this.state.currentSetting] == AutocompleteSetting.DEFAULT);
@@ -129,46 +142,28 @@ class TypingTask extends React.Component {
             [AutocompleteSetting.NONE]: "No autocomplete",
             [AutocompleteSetting.DEFAULT]: "VSCode's default autocomplete",
             [AutocompleteSetting.PRAGMATIC]: "Pragmatic autocomplete",
+            [AutocompleteSetting.BOTH]: "VSCode's + pragmatic autocomplete",
         }[this._currentSetting()];
 
-        const settingInstructions = {
-            [AutocompleteSetting.NONE]:
-                <p>
-                    In this setting, the editor's autocomplete feature is disabled.
-                    The editor still has other common code editing features, such as
-                    automatic indentation and syntax highlighting.
-                </p>,
-            [AutocompleteSetting.DEFAULT]: 
-                <p>
-                    In this setting, you'll use VSCode's default autocomplete feature.
-                    It suggests completions as you type, and you can use the arrow keys to
-                    choose a suggestion, press Enter to accept the currently highlighted suggestion,
-                    or Esc to close the list of suggestions. VSCode will suggest any previously
-                    used identifier that contains the characters that you have typed
-                    so far in the same order, even if some are missing. For example, if you type 'ap'
-                    it might suggest 'append'. The same will happen if you type 'apd', but not 'adp'.
-                </p>,
-            [AutocompleteSetting.PRAGMATIC]:
-                <p>
-                    In this setting, a set of common Python keywords and identifiers (such as 'self', 'import'
-                    and 'append') can be abbreviated to just its initial letter.
-                    You can type an entire line using abbreviations, and use Ctrl+Enter (or Cmd+Enter on MacOS)
-                    to expand the abbreviations you used. For example, typing the line 'i sys' and pressing
-                    Ctrl+Enter will replace the line by 'import sys'.
-                    Similarly, typing 'd _(s)' and pressing Ctrl+Enter will expand to 'def __init__(self)'.
-                    The keywords that can be abbreviated in this manner will be highlighted in yellow when you
-                    type them, so that you know you can abbreviate them the next time.
-                </p>
+        const videoId = {
+            [AutocompleteSetting.NONE]: 'C_ngwHWUp8s',
+            [AutocompleteSetting.DEFAULT]: 'eCyuVOnsn84',
+            [AutocompleteSetting.PRAGMATIC]: 'oS3uFM9okfw',
+            [AutocompleteSetting.BOTH]: 'Guu5XQmapxg',
         }[this._currentSetting()];
 
-        const settingQuickInstructions = {
-            [AutocompleteSetting.NONE]: null,
-            [AutocompleteSetting.DEFAULT]: null,
-            [AutocompleteSetting.PRAGMATIC]:
+        const ctrlEnterInstructions = (
                 <p>
                     Press Ctrl+Enter after typing an entire line of code using abbreviations to expand them.
                     Keywords highlighted in yellow can be abbreviated by just its initials.
                 </p>
+        );
+
+        const settingQuickInstructions = {
+            [AutocompleteSetting.NONE]: null,
+            [AutocompleteSetting.DEFAULT]: null,
+            [AutocompleteSetting.PRAGMATIC]: ctrlEnterInstructions,
+            [AutocompleteSetting.BOTH]: ctrlEnterInstructions,
         }[this._currentSetting()];
 
         const settingHeader = <h2>Setting { this.state.currentSetting + 1 }/{ NUMBER_OF_SETTINGS } - { settingDescription } </h2>;
@@ -179,41 +174,28 @@ class TypingTask extends React.Component {
                 {settingHeader}
                 <p>
                   In this study, we want to evaluate the effectiveness of
-                  different autocomplete systems.
+                  different autocomplete systems. Please watch the video below
+                  for a quick explanation of the settings you will use in this section.
                 </p>
+
+                <YouTube videoId={videoId} />
+
                 <p>
                   You'll be shown code on the left, and your goal is to type it
                   on the right correctly as fast as possible.
-                </p>
-                <p>
                   Once you're done typing, press Ctrl+S to submit (Cmd+S on
                   MacOS).
                 </p>
                 <p>
                   Differences in spaces (including indentation) do not matter. A
-                  small number of errors is also tolerated.
-                </p>
-                <h2>Next setting - {settingDescription}</h2>
-                {settingInstructions}
-                <p>
-                  Press the button below to start the typing task.
-                  Feel free to take a break while you're on this screen, but please
-                  do not stop once you advance to the next screen.
+                  small number of errors is tolerated.
                 </p>
                 <p>
-                    <input
-                        type="checkbox"
-                        onChange={e =>
-                            this.setState({ instructionsRead: e.target.checked })
-                        }
-                        value={this.state.instructionsRead}
-                    />
-                    I've read the instructions above and am ready to start.
+                  Feel free to take a break now before the task starts.
+                  When you're ready to start the task, which will take
+                  approximately 5 minutes, press the button below. 
                 </p>
-                <button
-                  disabled={!this.state.instructionsRead}
-                  onClick={() => this._start()}
-                >
+                <button onClick={() => this._start()}>
                   Start
                 </button>
               </div>
@@ -250,6 +232,7 @@ class TypingTask extends React.Component {
                             mountEditor={e => this.mountEditor(e)}
                             onChange={(nV, e) => this.onChange(nV, e)}
                             submitCode={c => this.submitCode(c)}
+                            onKeyDown={key => this._pushEvent({ 'type': 'key-press', key })}
                         />
                     </div>
                 </div>

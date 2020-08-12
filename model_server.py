@@ -4,12 +4,14 @@ from abbreviator import *
 from flask import Flask, request
 
 print('Loading model...')
-# 9ce32: 98.96% accuracy (CLM: 64d88, maxcol=3)
-# 2dcfe: 97.80% accuracy (CLM: bfe50, maxcol=inf)
-# c90f3: 98.56% accuracy (CLM: 3a64e, maxcol=3)
-# dce22: 97.28% accuracy
-# 5fa60: 96.09% accuracy
-abbreviator = CLMLanguageAbbreviator.load('models/2dcfe.model', device=torch.device('cpu'))
+# [Python] 9ce32: 98.96% accuracy (CLM: 64d88, maxcol=3)
+# [Python] 2dcfe: 97.80% accuracy (CLM: bfe50, maxcol=inf)
+# [Python] c90f3: 98.56% accuracy (CLM: 3a64e, maxcol=3)
+# [Python] dce22: 97.28% accuracy
+# [Python] 5fa60: 96.09% accuracy
+# [Java] 8f854: 98.06% accuracy
+# abbreviator = CLMLanguageAbbreviator.load('models/2dcfe.model', device=torch.device('cpu'))
+abbreviator = CLMLanguageAbbreviator.load('models/8f854.model', device=torch.device('cpu'))
 
 app = Flask(__name__)
 

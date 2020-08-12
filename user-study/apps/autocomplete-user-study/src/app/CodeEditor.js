@@ -5,6 +5,7 @@ export const AutocompleteSetting = {
     NONE: 0,
     DEFAULT: 1,
     PRAGMATIC: 2,
+    BOTH: 3,
 };
 
 const trim = (l) => {
@@ -13,6 +14,9 @@ const trim = (l) => {
 }
 
 const HIGHLIGHT_CLASS = 'magicompleteHighlight';
+
+const hasPragmatic = (setting) => (setting & AutocompleteSetting.PRAGMATIC) > 0;
+const hasDefault = (setting) => (setting & AutocompleteSetting.DEFAULT) > 0;
 
 export default class CodeEditor extends React.Component {
     constructor() {
@@ -40,11 +44,11 @@ export default class CodeEditor extends React.Component {
         e.focus();
         e.onDidChangeCursorPosition(evt => {
             this.line = evt.position.lineNumber;
-            if (this.props.setting == AutocompleteSetting.PRAGMATIC) {
+            if (hasPragmatic(this.props.setting)) {
                 this.updateHighlighting(e, evt.position);
             }
         });
-        if (this.props.setting == AutocompleteSetting.PRAGMATIC) {
+        if (hasPragmatic(this.props.setting)) {
             e.addAction({
             id: 'magicomplete',
             label: 'Pragmatic Code Autocomplete feature',
@@ -67,6 +71,9 @@ export default class CodeEditor extends React.Component {
                   }
                 }
             });
+        }
+        if (this.props.onKeyDown) {
+            e.onKeyDown(event => this.props.onKeyDown(event.code));
         }
     }
 
@@ -124,11 +131,11 @@ export default class CodeEditor extends React.Component {
 
     render() {
         const { setting } = this.props;
-        const defaultAutocomplete = setting == AutocompleteSetting.DEFAULT;
+        const defaultAutocomplete = hasDefault(setting);
 
         return (
             <MonacoEditor
-                language="python"
+                language="java"
                 theme="vs-dark"
                 value={this.state.code}
                 onChange={(nV, e) => this.onChange(nV, e)}
@@ -167,7 +174,7 @@ function splitAtIdentifierBoundaries(s) {
     return tokens;
 }
 
-function updateLineDecorations(line, model, strings) {  
+function updateLineDecorations(line, model, strings) {
     let decorations = model.getLineDecorations(line);
     let newDecorations = [];
 

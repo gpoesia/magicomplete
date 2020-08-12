@@ -205,7 +205,7 @@
             {
               "file": "apps/autocomplete-user-study/src/app/CodeEditor.js",
               "ext": ".js",
-              "mtime": 1593202630463.7112
+              "mtime": 1594877940751.264
             },
             {
               "file": "apps/autocomplete-user-study/src/app/Dataset.js",
@@ -215,7 +215,7 @@
             {
               "file": "apps/autocomplete-user-study/src/app/Playground.js",
               "ext": ".js",
-              "mtime": 1593190971632.7256
+              "mtime": 1593484299719.9788
             },
             {
               "file": "apps/autocomplete-user-study/src/app/Progress.js",
@@ -225,12 +225,12 @@
             {
               "file": "apps/autocomplete-user-study/src/app/TypingTask.js",
               "ext": ".js",
-              "mtime": 1593195639698.5427
+              "mtime": 1594878263244.7427
             },
             {
               "file": "apps/autocomplete-user-study/src/app/app.scss",
               "ext": ".scss",
-              "mtime": 1593193565503.3354
+              "mtime": 1594344962438.0435
             },
             {
               "file": "apps/autocomplete-user-study/src/app/app.spec.tsx",
@@ -1062,7 +1062,7 @@
       {
         "file": "apps/autocomplete-user-study/src/app/CodeEditor.js",
         "ext": ".js",
-        "mtime": 1593202630463.7112
+        "mtime": 1594877940751.264
       },
       {
         "file": "apps/autocomplete-user-study/src/app/Dataset.js",
@@ -1072,7 +1072,7 @@
       {
         "file": "apps/autocomplete-user-study/src/app/Playground.js",
         "ext": ".js",
-        "mtime": 1593190971632.7256
+        "mtime": 1593484299719.9788
       },
       {
         "file": "apps/autocomplete-user-study/src/app/Progress.js",
@@ -1082,12 +1082,12 @@
       {
         "file": "apps/autocomplete-user-study/src/app/TypingTask.js",
         "ext": ".js",
-        "mtime": 1593195639698.5427
+        "mtime": 1594878263244.7427
       },
       {
         "file": "apps/autocomplete-user-study/src/app/app.scss",
         "ext": ".scss",
-        "mtime": 1593193565503.3354
+        "mtime": 1594344962438.0435
       },
       {
         "file": "apps/autocomplete-user-study/src/app/app.spec.tsx",
