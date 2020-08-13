@@ -159,10 +159,13 @@ def train_set_embedding(
     print('Last loss:', loss[-1])
     print('Last accuracy:', acc[-1])
 
-def train_language_model(params_path, device, contexts_to_run):
+def train_language_model(params, device, contexts_to_run):
     print('Using device', device)
-    with open(params_path) as f:
-        params = json.load(f)
+
+    # If params is passed as a path, load it.
+    if type(params) is str:
+        with open(params) as f:
+            params = json.load(f)
 
     print('Loading dataset...')
 
@@ -170,6 +173,7 @@ def train_language_model(params_path, device, contexts_to_run):
         dataset = json.load(f)
 
     contexts_to_run = contexts_to_run.split(',')
+    ids = []
 
     for i, ctx_value in enumerate(contexts_to_run):
         params['model']['context'] = ctx_value
@@ -182,6 +186,10 @@ def train_language_model(params_path, device, contexts_to_run):
         tracker.start()
         lm.fit(dataset, tracker, params)
         tracker.close()
+
+        ids.append(tracker.run_id)
+
+    return ids
 
 def build_discriminative_lm_examples(examples, targets):
     X, y = [], []
@@ -355,10 +363,13 @@ def train_discriminative_abbreviator(params_path, device, contexts_to_run):
         abbreviator.fit(tracker, dataset['train'])
         tracker.close()
 
-def train_clm_abbreviator(params_path, device, contexts_to_run):
+def train_clm_abbreviator(params, device, contexts_to_run, evaluate=True):
     print('Using device', device)
-    with open(params_path) as f:
-        params = json.load(f)
+
+    # If params was passed as path.
+    if type(params) == str:
+        with open(params) as f:
+            params = json.load(f)
 
     print('Loading dataset...')
     with open(params['dataset']) as f:
@@ -369,6 +380,8 @@ def train_clm_abbreviator(params_path, device, contexts_to_run):
 
     S = cap_collisions(targets, params.get('max_collisions'))
     contexts_to_run = contexts_to_run.split(',')
+
+    ids = []
 
     for i, ctx_value in enumerate(contexts_to_run):
         params['clm']['context'] = ctx_value
@@ -382,10 +395,14 @@ def train_clm_abbreviator(params_path, device, contexts_to_run):
         clm_tracker.start()
         ab.fit(clm_tracker, dataset)
         clm_tracker.close()
+        ids.append(clm_tracker.run_id)
 
-        abbrev_params = { **params, 
-                          'comment': 'Evaluation of {}'.format(clm_tracker.run_id) }
-        evaluate_abbreviator(dataset, targets, ab, abbrev_params)
+        if evaluate:
+            abbrev_params = { **params,
+                              'comment': 'Evaluation of {}'.format(clm_tracker.run_id) }
+            evaluate_abbreviator(dataset, targets, ab, abbrev_params)
+
+    return ids
 
 def find_common_identifiers(dataset, min_length=2, max_length=50):
     frequencies = collections.Counter()
@@ -477,9 +494,11 @@ def cap_collisions(targets, max_collisions=None):
 
     return ts
 
-def run_abbreviator_experiment(params_path, device):
-    with open(params_path) as f:
-        params = json.load(f)
+def run_abbreviator_experiment(params, device):
+    # If params passed from a file, load it.
+    if type(params) == str:
+        with open(params) as f:
+            params = json.load(f)
 
     print('Loading dataset {}...'.format(params['dataset']))
 
@@ -525,7 +544,7 @@ def run_abbreviator_experiment(params_path, device):
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
 
-    evaluate_abbreviator(ds, targets, abbreviator, params)
+    return evaluate_abbreviator(ds, targets, abbreviator, params)
 
 def evaluate_abbreviator(dataset, targets, abbreviator, params):
     evaluator = AbbreviatorEvaluator(targets, dataset['dev'])
@@ -545,6 +564,7 @@ def evaluate_abbreviator(dataset, targets, abbreviator, params):
                   100*results['abbreviation_compression']))
 
     tracker.close()
+    return results
 
 def compute_vocabulary(dataset, vocabulary_size, output):
     bpe = BytePairEncoding({'vocabulary_size': vocabulary_size }, torch.device('cpu'))
