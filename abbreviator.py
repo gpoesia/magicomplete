@@ -187,6 +187,18 @@ class LMRLanguageAbbreviator:
         self.batch_size = parameters.get('batch_size') or 128
         self.beam_size = parameters.get('beam_size') or 32
         self.evaluation_examples = []
+        
+        self.abbreviations_frozen = False
+
+    def build_optimal_abbreviation_table(self, targets):
+        self.abbreviation_table = {}
+        self.inverted_abbreviations = collections.defaultdict(list)
+
+        for s in targets:
+            self.abbreviation_table[s] = s[0]
+            self.inverted_abbreviations[s[0]].append((s,))
+
+        self.abbreviations_frozen = True
 
     def encode_tokens(self, tokens):
         ts = []
@@ -254,6 +266,9 @@ class LMRLanguageAbbreviator:
         return [s[:l] for l in range(1, len(s)) if s[:l].isidentifier()]
 
     def find_abbreviation(self, string):
+        if self.abbreviations_frozen:
+            return self.abbreviation_table.get(string, string)
+
         string_tokens = split_at_identifier_boundaries(string)
 
         examples = []

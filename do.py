@@ -494,7 +494,7 @@ def cap_collisions(targets, max_collisions=None):
 
     return ts
 
-def run_abbreviator_experiment(params, device):
+def run_abbreviator_experiment(params, device, split='dev'):
     # If params passed from a file, load it.
     if type(params) == str:
         with open(params) as f:
@@ -505,7 +505,7 @@ def run_abbreviator_experiment(params, device):
     with open(params['dataset']) as f:
         ds = json.load(f)
 
-    print(len(ds['dev']), 'examples in the validation set.')
+    print(len(ds[split]), 'examples in the', split, 'set.')
 
     targets = build_abbreviation_targets(params['n_targets'], ds['train'])
 
@@ -544,10 +544,10 @@ def run_abbreviator_experiment(params, device):
     else:
         raise ValueError('Unknown abbreviator type', params['abbreviator']['type'])
 
-    return evaluate_abbreviator(ds, targets, abbreviator, params)
+    return evaluate_abbreviator(ds, targets, abbreviator, params, split)
 
-def evaluate_abbreviator(dataset, targets, abbreviator, params):
-    evaluator = AbbreviatorEvaluator(targets, dataset['dev'])
+def evaluate_abbreviator(dataset, targets, abbreviator, params, split='dev'):
+    evaluator = AbbreviatorEvaluator(targets, dataset[split])
     p = Progress(len(targets), print_every=1)
     tracker = RunTracker(abbreviator, params)
     tracker.extend_list('abbreviation_targets', targets)
@@ -564,7 +564,7 @@ def evaluate_abbreviator(dataset, targets, abbreviator, params):
                   100*results['abbreviation_compression']))
 
     tracker.close()
-    return results
+    return tracker.run_id, results
 
 def compute_vocabulary(dataset, vocabulary_size, output):
     bpe = BytePairEncoding({'vocabulary_size': vocabulary_size }, torch.device('cpu'))
