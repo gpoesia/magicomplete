@@ -375,7 +375,7 @@ def train_clm_abbreviator(params, device, contexts_to_run, evaluate=True):
     with open(params['dataset']) as f:
         dataset = json.load(f)
 
-    print('Finding abbreviation targets...')
+    print('Finding', params['n_targets'], 'abbreviation targets...')
     targets = build_abbreviation_targets(params['n_targets'], dataset['train'])
 
     S = cap_collisions(targets, params.get('max_collisions'))

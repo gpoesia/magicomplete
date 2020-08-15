@@ -297,9 +297,147 @@ class AccuracyExperiment(Experiment):
         lines.append('\\end{tabular}')
         lines.append('')
         return '\n'.join(lines)
+
+class AmbiguityExperiment(Experiment):
+    '''
+    Runs models with varying numbers of maximum collisions,
+    compute test accuracy and compression.
+
+    settings:
+        - max_collisions_cap: list of number of max collisions to run with.
+        - languages: list of languages to run.
+        - clm_params: params to the clm model
+    '''
+    def __init__(self, id):
+        super().__init__(id)
+        self.settings = {}
+        self.state = {}
+        self.results = {}
+        self.targets = {}
+        self.datasets = {}
+
+    def load(self):
+        with open(self.get_path()) as f:
+            data = json.load(f)
+            self.settings = data['settings']
+            self.state = data.get('state', {})
+            self.results = data.get('results', {})
+
+    def save(self):
+        with open(self.get_path(), 'w') as f:
+            json.dump({
+                'settings': self.settings,
+                'state': self.state,
+                'results': self.results,
+                }, f, indent=4)
+
+    def _get_model_name(self, max_collisions=None):
+        if max_collisions == 1:
+            return 'CLM: no collision'
+        else:
+            return 'CLM: {} collisions'.format(max_collisions)
+
+    def state_description(self):
+        lines = ['Ambiguity Experiment \'{}\''.format(self.id)]
+
+        evaluated = []
+
+        for language in self.settings['languages']:
+            for max_collisions in self.settings.get('max_collisions_cap', []):
+                model_id = self._get_model_name(max_collisions)
+                lines.append('{} trained: {}'
+                            .format(
+                                model_id,
+                                self.state.get('clm_trained[{}]'.format(model_id), 'no')))
+                if self.results.get(model_id):
+                    evaluated.append(model_id)
+
+        lines.append('Models evaluated: [{}]'.format(', '.join(evaluated)))
+        return '\n'.join(lines)
+
+    def _get_clm_params(self, language, max_collisions):
+        params = copy.deepcopy(self.settings['params']['clm'])
+        params['dataset'] = self.settings['languages'][language]
+        params['max_collisions'] = max_collisions
+        return params
+
+    def _load_data(self):
+        for language in self.settings['languages']:
+            with open(self.settings['languages'][language]) as f:
+                dataset = json.load(f)
+                self.datasets[language] = dataset
+                self.targets[language] = do.build_abbreviation_targets(
+                        self.settings['n_targets'], dataset['train'])
+
+    def run(self, device):
+        self._load_data()
+
+        ####
+        #### Step 1: train models.
+        ####
+
+        # CLM
+        for language in self.settings['languages']:
+            for max_collisions in self.settings.get('max_collisions_cap', []):
+                id = self._get_model_name(max_collisions)
+                params = self._get_clm_params(language, max_collisions)
+
+                trained_key = 'clm_trained[{}]'.format(id)
+
+                if not self.state.get(trained_key):
+                    print('Training', id)
+                    run_id = do.train_clm_abbreviator(
+                            params,
+                            device,
+                            'PREVIOUS_LINES',
+                            False)[0]
+
+                    self.state[trained_key] = run_id
+                    self.save()
+                else:
+                    print('Skipping already trained', id)
+
+        ####
+        # Step 2: evaluate
+        ####
+        for language in self.settings['languages']:
+            for max_collisions in self.settings.get('max_collisions', []):
+                id = self._get_model_name('CLM', language, ctx_lines)
+
+                if not self.results.get(id):
+                    print('Evaluating', id)
+                    run_id = self.state['clm_trained[{}]'.format(id)]
+                    abbrev = CLMLanguageAbbreviator.load('models/{}.model'.format(run_id),
+                                                             device)
+
+                    eval_id, results = do.evaluate_abbreviator(
+                            self.datasets[language],
+                            self.targets[language],
+                            abbrev,
+                            abbrev.params,
+                            'test')
+
+                    self.results[id] = {
+                            **results,
+                            'run_id': eval_id,
+                            }
+                    self.save()
+                else:
+                    print('Skipping already evaluated', id)
+
+        ####
+        # Step 3: generate plots
+        ####
+        print('Generating plots (TODO)...')
  
 def run_accuracy_experiment(id, device):
     e = AccuracyExperiment(id)
+    e.load()
+    print(e.state_description())
+    e.run(device)
+
+def run_ambiguity_experiment(id, device):
+    e = AmbiguityExperiment(id)
     e.load()
     print(e.state_description())
     e.run(device)
@@ -308,9 +446,13 @@ parser = argparse.ArgumentParser('Driver for all experiments in the paper.')
 parser.add_argument('--id', required=True, help='Experiment ID.')
 parser.add_argument('-a', '--accuracy', help='Run accuracy experiment (#1)',
                     action='store_const', const=True, default=False)
+parser.add_argument('-m', '--ambiguity', help='Run ambiguity experiment (#2)',
+                    action='store_const', const=True, default=False)
 parser.add_argument('--device', help='Device to run on', default='cpu')
 
 opt = parser.parse_args()
 
 if opt.accuracy:
     run_accuracy_experiment(opt.id, torch.device(opt.device))
+elif opt.ambiguity:
+    run_ambiguity_experiment(opt.id, torch.device(opt.device))
