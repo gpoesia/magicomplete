@@ -9,6 +9,7 @@ from models import load_from_run
 from language_model import RNNLanguageModel
 from util import random_hex_string
 from abbreviator import LMRLanguageAbbreviator, CLMLanguageAbbreviator
+import plots
 
 class Experiment:
     '''An experiment encodes the process of running it, the state transitions,
@@ -331,11 +332,11 @@ class AmbiguityExperiment(Experiment):
                 'results': self.results,
                 }, f, indent=4)
 
-    def _get_model_name(self, max_collisions=None):
+    def _get_model_name(self, language, max_collisions=None):
         if max_collisions == 1:
-            return 'CLM: no collision'
+            return '{}|CLM: no collision'.format(language)
         else:
-            return 'CLM: {} collisions'.format(max_collisions)
+            return '{}|CLM: {} collisions'.format(language, max_collisions)
 
     def state_description(self):
         lines = ['Ambiguity Experiment \'{}\''.format(self.id)]
@@ -344,7 +345,7 @@ class AmbiguityExperiment(Experiment):
 
         for language in self.settings['languages']:
             for max_collisions in self.settings.get('max_collisions_cap', []):
-                model_id = self._get_model_name(max_collisions)
+                model_id = self._get_model_name(language, max_collisions)
                 lines.append('{} trained: {}'
                             .format(
                                 model_id,
@@ -379,7 +380,7 @@ class AmbiguityExperiment(Experiment):
         # CLM
         for language in self.settings['languages']:
             for max_collisions in self.settings.get('max_collisions_cap', []):
-                id = self._get_model_name(max_collisions)
+                id = self._get_model_name(language, max_collisions)
                 params = self._get_clm_params(language, max_collisions)
 
                 trained_key = 'clm_trained[{}]'.format(id)
@@ -401,14 +402,13 @@ class AmbiguityExperiment(Experiment):
         # Step 2: evaluate
         ####
         for language in self.settings['languages']:
-            for max_collisions in self.settings.get('max_collisions', []):
-                id = self._get_model_name('CLM', language, ctx_lines)
+            for max_collisions in self.settings.get('max_collisions_cap', []):
+                id = self._get_model_name(language, max_collisions)
 
                 if not self.results.get(id):
                     print('Evaluating', id)
                     run_id = self.state['clm_trained[{}]'.format(id)]
-                    abbrev = CLMLanguageAbbreviator.load('models/{}.model'.format(run_id),
-                                                             device)
+                    abbrev = CLMLanguageAbbreviator.load('models/{}.model'.format(run_id), device)
 
                     eval_id, results = do.evaluate_abbreviator(
                             self.datasets[language],
@@ -428,7 +428,22 @@ class AmbiguityExperiment(Experiment):
         ####
         # Step 3: generate plots
         ####
-        print('Generating plots (TODO)...')
+        for i, language in enumerate(self.settings['languages']):
+            is_first, is_last = i == 0, i + 1 == len(self.settings['languages'])
+            accuracy, compression = [], []
+
+            for max_collisions in self.settings.get('max_collisions_cap', []):
+                id = self._get_model_name(language, max_collisions)
+                accuracy.append(self.results[id]['accuracy'])
+                compression.append(self.results[id]['eval_compression'])
+
+            output_path = 'experiments/{}-{}.png'.format(self.id, language)
+
+            plots.plot_accuracy_compression(accuracy, compression, language,
+                                            y_label=is_first, legend=is_last,
+                                            output=output_path)
+
+            print('Generated', output_path)
  
 def run_accuracy_experiment(id, device):
     e = AccuracyExperiment(id)

@@ -22,4 +22,7 @@ def plot_accuracy_compression(accuracy, compression, language, y_label=True, leg
         ylab('Value' if y_label else '')
     )
 
+    if output:
+        fig.save(output)
+
     return fig
