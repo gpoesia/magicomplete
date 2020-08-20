@@ -18,7 +18,8 @@ def plot_accuracy_compression(accuracy, compression, language, y_label=True, leg
         geom_step(show_legend=legend) +
         ggtitle(language) +
         scale_y_continuous(breaks=[0.0, 0.05, 0.1, 0.15, 0.2, 0.95, 1.0]) +
-        theme_bw() +
+        theme_bw(base_size=16) +
+        theme(aspect_ratio=1.2) +
         ylab('Value' if y_label else '')
     )
 

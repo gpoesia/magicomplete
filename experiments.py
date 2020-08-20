@@ -77,7 +77,7 @@ class AccuracyExperiment(Experiment):
 
     def _get_model_name(self, type, language, ctx_lines=None):
         language_prefix = '{}|'.format(language) if language else ''
-            
+
         if type == 'CLM':
             return '{}CLM, ctx size {}'.format(language_prefix, ctx_lines)
         else:
@@ -120,7 +120,7 @@ class AccuracyExperiment(Experiment):
         params = copy.deepcopy(self.settings['params']['clm'])
         params['dataset'] = self.settings['languages'][language]
         params['clm']['n_previous_lines'] = context_lines
-        params['n_targets'] = self.settings['n_targets'] 
+        params['n_targets'] = self.settings['n_targets']
         return params
 
     def _get_lm_params(self, language):
@@ -239,7 +239,7 @@ class AccuracyExperiment(Experiment):
                     self.save()
                 else:
                     print('Skipping already evaluated', id)
- 
+
         ####
         # Step 3: generate LaTeX table
         ####
@@ -282,14 +282,14 @@ class AccuracyExperiment(Experiment):
 
         # Format table line by line
         lines = []
-        lines.append('\\begin{tabular}{|c|' + 
-                     ('c|' * len(self.settings['languages'])) + 
+        lines.append('\\begin{tabular}{|c|' +
+                     ('c|' * len(self.settings['languages'])) +
                      '}')
         lines.append('    \\hline & ' + ' & '.join(self.settings['languages'].keys()) + ' \\\\')
 
         for row in rows:
             lines.append(
-                    '    \\hline ' + 
+                    '    \\hline ' +
                     ' & '.join([format_table_entry(v, 3, i >= 1 and v == max_by_column[i-1])
                                      for i, v in enumerate(row)]) +
                     ' \\\\')
@@ -371,7 +371,20 @@ class AmbiguityExperiment(Experiment):
                         self.settings['n_targets'], dataset['train'])
 
     def run(self, device):
-        self._load_data()
+        ####
+        #### Step 0: load data (if needed).
+        ####
+        need_data = False
+
+        for language in self.settings['languages']:
+            for max_collisions in self.settings.get('max_collisions_cap', []):
+                id = self._get_model_name(language, max_collisions)
+
+                if not self.results.get(id):
+                    need_data = True
+
+        if need_data:
+            self._load_data()
 
         ####
         #### Step 1: train models.
@@ -444,7 +457,7 @@ class AmbiguityExperiment(Experiment):
                                             output=output_path)
 
             print('Generated', output_path)
- 
+
 def run_accuracy_experiment(id, device):
     e = AccuracyExperiment(id)
     e.load()
