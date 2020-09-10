@@ -482,7 +482,7 @@ def build_abbreviation_targets(n_abbreviations, dataset):
 
 def cap_collisions(targets, max_collisions=None):
     if max_collisions is None:
-        return targes
+        return targets
 
     cnt = collections.Counter()
     ts = []

@@ -13,6 +13,7 @@ from language_model import RNNLanguageModel, DiscriminativeLanguageModel
 from decoder import AutoCompleteDecoderModel
 import math
 import time
+import logging
 
 class AbbreviationAlgorithm:
     def generate_alternatives(self, string):
@@ -396,7 +397,7 @@ class CLMLanguageAbbreviator:
         queries = [{ **ex,
                      'l': self.abbreviate(ex['l'], self.abbreviation_targets) }
                      for ex in examples]
-        predictions = self.beam_search(queries, beam_size=2)
+        predictions = self.beam_search(queries)
         correct = [r['l'] == p[0] for r, p in zip(examples, predictions)]
         return sum(correct) / len(examples)
  
@@ -501,7 +502,7 @@ class CLMLanguageAbbreviator:
 
         return ''.join(abbrev_tokens)
 
-    def fit(self, tracker, dataset):
+    def fit(self, tracker, dataset, fine_tuning=False):
         learning_rate = self.params.get('learning_rate', 1e-3)
         batch_size = self.params.get('batch_size') or 32
         init_scale = self.params.get('init_scale') or 0.1
@@ -511,18 +512,23 @@ class CLMLanguageAbbreviator:
         val_examples = self.params.get('val_examples') or 1000
         lr_gamma = self.params.get('lr_gamma') or 1.0
 
-        training_set, val_set = dataset['train'], dataset['dev']
+        training_set, val_set = dataset['train'], dataset.get('dev', dataset['test'])
         batches_per_epoch = math.ceil(len(training_set) * epochs / batch_size)
         total_batches = epochs * batches_per_epoch
         val_acc = 0
 
         random.shuffle(val_set)
 
-        for p in self.clm.parameters():
-            if len(p.shape) >= 2:
-                torch.nn.init.xavier_uniform_(p)
-            else:
-                torch.nn.init.uniform_(p, -init_scale, init_scale)
+        if not fine_tuning:
+            for p in self.clm.parameters():
+                if len(p.shape) >= 2:
+                    torch.nn.init.xavier_uniform_(p)
+                else:
+                    torch.nn.init.uniform_(p, -init_scale, init_scale)
+        else:
+            logging.debug(
+                    'Fine-tuning for {} epochs on {} examples (batch size: {})'
+                    .format(epochs, len(training_set), batch_size))
 
         optimizer = torch.optim.Adam(self.clm.parameters(),
                                      lr=learning_rate)
@@ -544,19 +550,23 @@ class CLMLanguageAbbreviator:
                 optimizer.step()
 
                 if p.tick() % log_every == 0:
-                    print('Epoch {} batch {}: loss = {:.3f}, {}'
-                          .format(e, i, loss.item(), p.format()))
+                    logging.debug('Epoch {} batch {}: loss = {:.3f}, {}'
+                            .format(e, i, loss.item(), p.format()))
 
-                tracker.step()
-                tracker.add_scalar('train/loss', loss.item())
+                if tracker is not None:
+                    tracker.step()
+                    tracker.add_scalar('train/loss', loss.item())
 
-                if tracker.current_step % validate_every == 0:
-                    last_val, val_acc = val_acc, self.validate(val_set[:val_examples], tracker)
-                    if val_acc < last_val:
-                        pass # TODO: Remove some items from S based on confusion matrix?
+                    if tracker.current_step % validate_every == 0:
+                        last_val, val_acc = val_acc, self.validate(val_set[:val_examples], tracker)
 
-            tracker.checkpoint()
-        self.validate(val_set[:val_examples], tracker)
+            # End of epoch.
+            if tracker is not None:
+                tracker.checkpoint()
+
+        # End of training.
+        if tracker is not None:
+            self.validate(val_set[:val_examples], tracker)
 
     def validate(self, examples, tracker):
         val_acc = self.compute_accuracy(examples)

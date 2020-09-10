@@ -144,16 +144,6 @@ class AutoCompleteDecoderModel(nn.Module):
             proj = self.vocab_proj(timestep_out)
             last_output = F.softmax(proj, dim=1)
 
-            if i == 0:
-                self.last_V = V
-                self.last_V.retain_grad()
-                self.last_timestep_out = timestep_out
-                self.last_timestep_out.retain_grad()
-                self.proj = proj
-                self.proj.retain_grad()
-                self.last_last_output = last_output
-                self.last_last_output.retain_grad()
-
             if is_training:
                 predictions.append(last_output)
                 next_input = E_emb[:, i + 1]
