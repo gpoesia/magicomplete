@@ -1,4 +1,4 @@
-# Cocolab
+# Pragmatic Code Autocomplete
 
 This project was generated using [Nx](https://nx.dev).
 
